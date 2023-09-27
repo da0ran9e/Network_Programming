@@ -12,7 +12,7 @@
 #define MAX_FIRST_NAME 20
 #define MAX_LAST_NAME 20
 
-typedef struct {
+typedef struct Student {
     char studentID[10];
     char firstName[20];
     char lastName[20];
@@ -20,6 +20,7 @@ typedef struct {
     double finalExamMark;
     double mark;
     char grade;
+    struct Student* next;
 } Student;
 
 void removeSpaces(char *str) {
@@ -57,15 +58,13 @@ void calculateGradingSummary(const char *filename) {
         return;
     }
 
-
     char subjectID[20];
     char subjectName[50];
     char semesterID[10];
-    char progessString[6];
-    char finalString[6];
+    char progressWeightStr[6];
+    char finalExamWeightStr[6];
     int progressWeight, finalExamWeight;
     int studentCount;
-    Student students[MAX_STUDENTS];
     double averageMark = 0.0;
     int highestMarkIndex = 0;
     int lowestMarkIndex = 0;
@@ -73,14 +72,71 @@ void calculateGradingSummary(const char *filename) {
     // Read subject information
     fscanf(file, "SubjectID|%s\n", subjectID);
     fscanf(file, "Subject|%[^\n]\n", subjectName);
-    fscanf(file, "F|%d|%d\n", &progressWeight, &finalExamWeight);
+    fscanf(file, "F|%[^|]|%[^|]\n", progressWeightStr, finalExamWeightStr);
     fscanf(file, "Semester|%s\n", semesterID);
     fscanf(file, "StudentCount|%d\n", &studentCount);
 
+    // Convert progress and final exam weights to integers
+    progressWeight = atoi(progressWeightStr);
+    finalExamWeight = atoi(finalExamWeightStr);
+
+    // Initialize the linked list of students
+    Student *head = NULL;
+    Student *current = NULL;
+
+    // Read student information and create the linked list
+    for (int i = 0; i < studentCount; i++) {
+        Student *newStudent = (Student *)malloc(sizeof(Student));
+        if (newStudent == NULL) {
+            printf("Error: Memory allocation failed\n");
+            fclose(file);
+            return;
+        }
+
+        fscanf(file, "S|%[^|]|%[^|]|%[^|]|%[^|]|%[^|]| %c |\n",
+               newStudent->studentID,
+               newStudent->firstName,
+               newStudent->lastName,
+               progressWeightStr,
+               finalExamWeightStr,
+               &newStudent->grade);
+
+        // Remove leading and trailing spaces from first name and last name
+        removeSpaces(newStudent->firstName);
+        removeSpaces(newStudent->lastName);
+
+        // Convert progress and final exam marks to doubles
+        newStudent->progressMark = atof(progressWeightStr);
+        newStudent->finalExamMark = atof(finalExamWeightStr);
+
+        // Calculate the total mark for the student
+        newStudent->mark = (newStudent->progressMark * progressWeight +
+                            newStudent->finalExamMark * finalExamWeight) / 100;
+
+        // Update the linked list
+        newStudent->next = NULL;
+        if (head == NULL) {
+            head = newStudent;
+            current = newStudent;
+        } else {
+            current->next = newStudent;
+            current = newStudent;
+        }
+
+        // Update statistics
+        averageMark += newStudent->mark;
+        if (newStudent->mark > head->mark)
+            highestMarkIndex = i;
+        if (newStudent->mark < head->mark)
+            lowestMarkIndex = i;
+    }
+    averageMark /= studentCount;
+
+    // Output grading summary to the output file
     char outputFileName[50] = "output/";
     strcat(outputFileName, subjectID);
     strcat(outputFileName, "_");
-    strcat(outputFileName, subjectID);
+    strcat(outputFileName, semesterID);
     strcat(outputFileName, "_rp.txt");
     FILE *outputFile = fopen(outputFileName, "a+");
     if (outputFile == NULL) {
@@ -89,58 +145,18 @@ void calculateGradingSummary(const char *filename) {
         return;
     }
 
-    // Read student information
-    for (int i = 0; i < studentCount; i++) {
-        fscanf(file, "S|%[^|]|%[^|]|%[^|]|%[^|]|%[^|]| %c |\n",
-               students[i].studentID,
-               students[i].firstName,
-               students[i].lastName,
-               progessString,
-               finalString,
-               &students[i].grade);
-
-        removeSpaces(students[i].firstName);
-        removeSpaces(students[i].lastName);
-
-        for (int j = 0; j < 6; j++) {
-            if (progessString[j] == '.') {
-                students[i].progressMark = (progessString[j - 2] == '1' ? 10.0 : 0.0) +
-                                           (0.0 + progessString[j - 1] - '0') +
-                                           (0.0 + (progessString[j + 1] - '0')) / 10 +
-                                           (0.0 + (progessString[j + 2] > '0' ? progessString[j + 2] - '0' : 0)) / 100;
-            }
-            if (finalString[j] == '.') {
-                students[i].finalExamMark = (finalString[j - 2] == '1' ? 10.0 : 0.0) +
-                                             (0.0 + finalString[j - 1] - '0') +
-                                             (0.0 + (finalString[j + 1] - '0')) / 10 +
-                                             (0.0 + (finalString[j + 2] > '0' ? finalString[j + 2] - '0' : 0)) / 100;
-            }
-        }
-
-        students[i].mark += (students[i].progressMark * progressWeight + students[i].finalExamMark * finalExamWeight) / 100;
-
-        averageMark += students[i].mark;
-        if (students[i].mark > students[highestMarkIndex].mark)
-            highestMarkIndex = i;
-        if (students[i].mark < students[lowestMarkIndex].mark)
-            lowestMarkIndex = i;
-    }
-    averageMark /= studentCount;
-
-    // Output grading summary to the output file
     fprintf(outputFile, "The student with the highest mark is: %s %s\n",
-            students[highestMarkIndex].firstName,
-            students[highestMarkIndex].lastName);
+            head->firstName, head->lastName);
     fprintf(outputFile, "The student with the lowest mark is: %s %s\n",
-            students[lowestMarkIndex].firstName,
-            students[lowestMarkIndex].lastName);
+            head->firstName, head->lastName);
     fprintf(outputFile, "The average mark is: %.2lf\n", averageMark);
     fprintf(outputFile, "\nA histogram of the subject %s is: \n", subjectID);
 
     // Calculate histogram
     int gradeCounts[5] = {0};
-    for (int i = 0; i < studentCount; i++) {
-        switch (students[i].grade) {
+    Student *currentStudent = head;
+    while (currentStudent != NULL) {
+        switch (currentStudent->grade) {
             case 'A':
                 gradeCounts[0]++;
                 break;
@@ -157,6 +173,7 @@ void calculateGradingSummary(const char *filename) {
                 gradeCounts[4]++;
                 break;
         }
+        currentStudent = currentStudent->next;
     }
 
     // Output histogram to the output file
@@ -185,8 +202,15 @@ void calculateGradingSummary(const char *filename) {
     // Close both input and output files
     fclose(file);
     fclose(outputFile);
-}
 
+    // Free dynamically allocated memory for the linked list
+    currentStudent = head;
+    while (currentStudent != NULL) {
+        Student *temp = currentStudent;
+        currentStudent = currentStudent->next;
+        free(temp);
+    }
+}
 void displayMenu() {
     printf("Learning Management System\n");
     printf("-------------------------------------\n");
