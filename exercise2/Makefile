@@ -2,16 +2,17 @@ CC = gcc
 CFLAGS = -Wall -Wextra
 SRC = grading.c 
 OBJ = $(SRC:.c=.o)
+EXECUTABLE = exercise2
 
 .PHONY: all clean
 
-all: exercise2
+all: $(EXECUTABLE)
 
-exercise1: $(OBJ)
+$(EXECUTABLE): $(OBJ)
 	$(CC) $(CFLAGS) -o $@ $^
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 clean:
-	rm -f exercise2 $(OBJ)
+	rm -f $(EXECUTABLE) $(OBJ)

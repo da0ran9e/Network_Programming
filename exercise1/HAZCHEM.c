@@ -136,5 +136,6 @@ int main(){
 
 	}
 	while(coloured!=-1);
-	scanf("%S");
+	
+	scanf("%s", code);
 }
