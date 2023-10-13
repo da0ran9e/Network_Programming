@@ -3,12 +3,12 @@
 #include <string.h>
 #include <ctype.h>
 #include <unistd.h>
+#include <netdb.h>
 #include <arpa/inet.h>
 
 #define MAX_BUFF_SIZE 1024
 
-
-void resolveDomainOrIP(const char *input, char *replyStr, char *errorStr) {
+void resolveDomainOrIP(const char *input) {
     int hasError = 0;
 
     struct addrinfo hints, *result, *rp;
@@ -67,7 +67,7 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    int port = atoi(argv[1]); //string to integer
+    int port = atoi(argv[1]);
 
     int sockfd;
     struct sockaddr_in serverAddr, clientAddr;
@@ -75,56 +75,85 @@ int main(int argc, char *argv[]) {
 
     // Create a socket
     if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
-        perror("Socket creation error: ");
-        return 0;
+        perror("Socket creation error");
+        return 1;
     }
 
     memset(&serverAddr, 0, sizeof(serverAddr));
     serverAddr.sin_family = AF_INET;
     serverAddr.sin_addr.s_addr = htonl(INADDR_ANY);
-    serverAddr.sin_port = htons(port); //bind the socket to the given port
+    serverAddr.sin_port = htons(port);
 
-    // Bind the socket to the port
+    // Bind the socket to the specified port
     if (bind(sockfd, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) < 0) {
-        perror("Bind error: ");
-        return 0;
+        perror("Bind error");
+        return 1;
     }
 
-    printf("Server is running at port: %d\n", port);
+    printf("Server is running at port %d.\n", port);
 
     char buffer[MAX_BUFF_SIZE];
-    char parameter[MAX_BUFF_SIZE];
-    char reply[MAX_BUFF_SIZE];
-    char errorStr[MAX_BUFF_SIZE];
-    
     while (1) {
         memset(buffer, 0, sizeof(buffer));
         int n = recvfrom(sockfd, buffer, sizeof(buffer), 0, (struct sockaddr *)&clientAddr, &clientAddrLen);
 
-        //check reveived data
         if (n < 0) {
             perror("Receive error");
             continue;
         }
 
-        resolveDomainOrIP(buffer, replyStr, errorStr);
+        char ipStr[MAX_BUFF_SIZE];
+        char nameStr[MAX_BUFF_SIZE];
+        char aliasStr[MAX_BUFF_SIZE];
+        char errorStr[] = "Error: Notfound information.";
 
-        // int alphaIndex = 0;
-        // int digitIndex = 0;
-        // int hasError = 0;
+        int hasError = 0;
 
-        // for (int i = 0; i < n; i++) {
-        //     if (isalpha(buffer[i])) {
-        //         alphabetStr[alphaIndex++] = buffer[i];
-        //     } else if (isdigit(buffer[i])) {
-        //         digitStr[digitIndex++] = buffer[i];
-        //     } else {
-        //         hasError = 1;
-        //         break;
-        //     }
-        // }
+        struct addrinfo hints, *result, *rp;
+        memset(&hints, 0, sizeof(struct addrinfo));
+        hints.ai_family = AF_UNSPEC;  // Chấp nhận cả IPv4 và IPv6
 
-        if (strlen(errorStr) > 0) {
+        int ret = getaddrinfo(input, NULL, &hints, &result);
+        if (ret == 0) {
+            for (rp = result; rp != NULL; rp = rp->ai_next) {
+                if (rp->ai_family == AF_INET) {  // IPv4
+                    struct sockaddr_in *ipv4 = (struct sockaddr_in *)rp->ai_addr;
+                    strcat(ipStr, inet_ntoa(ipv4->sin_addr))
+                    
+                } else if (rp->ai_family == AF_INET6) {  // IPv6
+                    char ip6str[INET6_ADDRSTRLEN];
+                    struct sockaddr_in6 *ipv6 = (struct sockaddr_in6 *)rp->ai_addr;
+                    inet_ntop(AF_INET6, &(ipv6->sin6_addr), ip6str, INET6_ADDRSTRLEN);
+                    strcat(ipStr, ip6str)
+                    
+                }
+            }
+            freeaddrinfo(result);
+        } else {
+            struct hostent *hostInfo;
+            if (inet_pton(AF_INET, input, &(struct in_addr){}) == 1) {
+                // Input is a valid IP address
+                hostInfo = gethostbyaddr(input, strlen(input), AF_INET);
+            } else {
+                // Input is considered as a domain name
+                hostInfo = gethostbyname(input);
+            }
+
+            if (hostInfo != NULL) {
+                strcat(nameStr, hostInfo->h_name);
+  
+                char **alias = hostInfo->h_addr_list;
+                while (*alias != NULL) {
+                    strcat(aliasStr, "\n");
+                    strcat(aliasStr, *alias);
+                    alias++;
+                }
+            } else {
+                hasError = 1;
+            }
+        }
+
+        if (hasError) {
             sendto(sockfd, errorStr, strlen(errorStr), 0, (struct sockaddr *)&clientAddr, clientAddrLen);
         } else {
             alphabetStr[alphaIndex] = '\0';
