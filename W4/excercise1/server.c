@@ -13,7 +13,7 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    int port = atoi(argv[1]);
+    int port = atoi(argv[1]); //string to integer
 
     int sockfd;
     struct sockaddr_in serverAddr, clientAddr;
@@ -21,8 +21,8 @@ int main(int argc, char *argv[]) {
 
     // Create a socket
     if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
-        perror("Socket creation error");
-        return 1;
+        perror("Socket creation error: ");
+        return 0;
     }
 
     memset(&serverAddr, 0, sizeof(serverAddr));
@@ -33,7 +33,7 @@ int main(int argc, char *argv[]) {
     // Bind the socket to the specified port
     if (bind(sockfd, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) < 0) {
         perror("Bind error");
-        return 1;
+        return 0;
     }
 
     printf("Server is running at port %d.\n", port);
