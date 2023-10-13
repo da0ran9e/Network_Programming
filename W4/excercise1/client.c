@@ -61,40 +61,43 @@ int main(int argc, char *argv[]) {
     serverAddr.sin_addr.s_addr = inet_addr(serverIP); //bind to ip address
     serverAddr.sin_port = htons(port); //bind to port
 
-    char buffer[MAX_BUFF_SIZE];
+    sendMessageToServer(sockfd, &serverAddr);
 
-    while (1) {
-        printf("Enter a string (or '***' to exit): ");
-        fgets(buffer, sizeof(buffer), stdin);
-        buffer[strcspn(buffer, "\n")] = '\0';
+    receiveAndPrintResults(sockfd);
 
-        if (strcmp(buffer, "***") == 0 || strcmp(buffer, "") == 0) {
-            break;
-        }
+    // char buffer[MAX_BUFF_SIZE];
 
-        sendto(sockfd, buffer, strlen(buffer), 0, (struct sockaddr *)&serverAddr, sizeof(serverAddr));
+    // while (1) {
+    //     printf("Enter a string (or '***' to exit): ");
+    //     fgets(buffer, sizeof(buffer), stdin);
+    //     buffer[strcspn(buffer, "\n")] = '\0';
 
-        memset(buffer, 0, sizeof(buffer));
-        int n = recvfrom(sockfd, buffer, sizeof(buffer), 0, NULL, NULL);
+    //     if (strcmp(buffer, "***") == 0 || strcmp(buffer, "") == 0) {
+    //         break;
+    //     }
 
-        if (n < 0) {
-            perror("Receive error");
-            break;
-        }
+    //     sendto(sockfd, buffer, strlen(buffer), 0, (struct sockaddr *)&serverAddr, sizeof(serverAddr));
 
-        printf("Received alphabet string: %s\n", buffer);
+    //     memset(buffer, 0, sizeof(buffer));
+    //     int n = recvfrom(sockfd, buffer, sizeof(buffer), 0, NULL, NULL);
 
-        memset(buffer, 0, sizeof(buffer));
-        n = recvfrom(sockfd, buffer, sizeof(buffer), 0, NULL, NULL);
+    //     if (n < 0) {
+    //         perror("Receive error");
+    //         break;
+    //     }
 
-        if (n < 0) {
-            perror("Receive error");
-            break;
-        }
+    //     printf("Received alphabet string: %s\n", buffer);
 
-        printf("Received digit string: %s\n", buffer);
-    }
+    //     memset(buffer, 0, sizeof(buffer));
+    //     n = recvfrom(sockfd, buffer, sizeof(buffer), 0, NULL, NULL);
 
+    //     if (n < 0) {
+    //         perror("Receive error");
+    //         break;
+    //     }
+
+    //     printf("Received digit string: %s\n", buffer);
+    // }
     close(sockfd);
     return 0;
 }
