@@ -6,17 +6,6 @@
 
 #define MAX_BUFF_SIZE 1024
 
-// Function to send data to the server
-void sendDataToServer(int sockfd, const char *data, const struct sockaddr *serverAddr, socklen_t len) {
-    sendto(sockfd, data, strlen(data), 0, serverAddr, len);
-}
-
-// Function to receive data from the server
-int receiveDataFromServer(int sockfd, char *buffer) {
-    memset(buffer, 0, MAX_BUFF_SIZE);
-    return recvfrom(sockfd, buffer, MAX_BUFF_SIZE, 0, NULL, NULL);
-}
-
 int main(int argc, char *argv[]) {
     if (argc != 3) {
         fprintf(stderr, "Usage: %s IPAddress PortNumber\n", argv[0]);
@@ -29,6 +18,7 @@ int main(int argc, char *argv[]) {
     int sockfd;
     struct sockaddr_in serverAddr;
 
+    // Create a socket
     if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
         perror("Socket creation error");
         return 1;
@@ -50,16 +40,22 @@ int main(int argc, char *argv[]) {
             break;
         }
 
-        sendDataToServer(sockfd, buffer, (struct sockaddr *)&serverAddr, sizeof(serverAddr));
+        sendto(sockfd, buffer, strlen(buffer), 0, (struct sockaddr *)&serverAddr, sizeof(serverAddr));
 
-        if (receiveDataFromServer(sockfd, buffer) < 0) {
+        memset(buffer, 0, sizeof(buffer));
+        int n = recvfrom(sockfd, buffer, sizeof(buffer), 0, NULL, NULL);
+
+        if (n < 0) {
             perror("Receive error");
             break;
         }
 
         printf("Received alphabet string: %s\n", buffer);
 
-        if (receiveDataFromServer(sockfd, buffer) < 0) {
+        memset(buffer, 0, sizeof(buffer));
+        n = recvfrom(sockfd, buffer, sizeof(buffer), 0, NULL, NULL);
+
+        if (n < 0) {
             perror("Receive error");
             break;
         }
