@@ -102,6 +102,10 @@ int main(int argc, char *argv[]) {
             continue;
         }
 
+        int ipOffset = 0;
+        int nameOffset = 0;
+        int aliasOffset = 0;
+
         char ipStr[MAX_BUFF_SIZE];
         char nameStr[MAX_BUFF_SIZE];
         char aliasStr[MAX_BUFF_SIZE];
@@ -118,13 +122,20 @@ int main(int argc, char *argv[]) {
             for (rp = result; rp != NULL; rp = rp->ai_next) {
                 if (rp->ai_family == AF_INET) {  // IPv4
                     struct sockaddr_in *ipv4 = (struct sockaddr_in *)rp->ai_addr;
-                    strcat(ipStr, inet_ntoa(ipv4->sin_addr))
+                    char ip[] = inet_ntoa(ipv4->sin_addr);
+                    for (int i = 0; i < strlen(ip); i++){
+                        ipStr[ipOffset++] = ip[i];
+                    }
                     
                 } else if (rp->ai_family == AF_INET6) {  // IPv6
                     char ip6str[INET6_ADDRSTRLEN];
                     struct sockaddr_in6 *ipv6 = (struct sockaddr_in6 *)rp->ai_addr;
                     inet_ntop(AF_INET6, &(ipv6->sin6_addr), ip6str, INET6_ADDRSTRLEN);
-                    strcat(ipStr, ip6str)
+                    
+                    char ip[] = ip6str;
+                    for (int i = 0; i < strlen(ip); i++){
+                        ipStr[ipOffset++] = ip[i];
+                    }
                     
                 }
             }
@@ -140,11 +151,11 @@ int main(int argc, char *argv[]) {
             }
 
             if (hostInfo != NULL) {
-                strcat(nameStr, hostInfo->h_name);
+                char name[] = hostInfo->h_name;
+                
   
                 char **alias = hostInfo->h_addr_list;
                 while (*alias != NULL) {
-                    strcat(aliasStr, "\n");
                     strcat(aliasStr, *alias);
                     alias++;
                 }
