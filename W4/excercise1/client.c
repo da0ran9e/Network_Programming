@@ -1,71 +1,66 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <arpa/inet.h>
 #include <unistd.h>
+#include <arpa/inet.h>
 
-#define MAX_BUF_SIZE 1024
+#define MAX_BUFF_SIZE 1024
 
 int main(int argc, char *argv[]) {
     if (argc != 3) {
-        printf("Usage: %s <IPAddress> <PortNumber>\n", argv[0]);
+        fprintf(stderr, "Usage: %s IPAddress PortNumber\n", argv[0]);
         return 1;
     }
 
-    int clientPort = atoi(argv[2);
+    char *serverIP = argv[1];
+    int port = atoi(argv[2]);
 
-    int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
-    if (sockfd < 0) {
-        perror("Error: Failed to create socket");
-        return 1;
-    }
-
+    int sockfd;
     struct sockaddr_in serverAddr;
-    socklen_t addrLen = sizeof(serverAddr);
+
+    // Create a socket
+    if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+        perror("Socket creation error");
+        return 1;
+    }
 
     memset(&serverAddr, 0, sizeof(serverAddr));
     serverAddr.sin_family = AF_INET;
-    serverAddr.sin_addr.s_addr = inet_addr(argv[1]);
-    serverAddr.sin_port = htons(clientPort);
+    serverAddr.sin_addr.s_addr = inet_addr(serverIP);
+    serverAddr.sin_port = htons(port);
 
-    char clientMsg[MAX_BUF_SIZE];
-    char serverResponse[MAX_BUF_SIZE];
-    int receivedBytes;
+    char buffer[MAX_BUFF_SIZE];
 
-    printf("Enter a string (or '***' to exit): ");
     while (1) {
-        fgets(clientMsg, sizeof(clientMsg), stdin);
-        clientMsg[strcspn(clientMsg, "\n")] = '\0';
-
-        if (sendto(sockfd, clientMsg, strlen(clientMsg), 0, (struct sockaddr *)&serverAddr, addrLen) < 0) {
-            perror("Error: Failed to send data");
-            break;
-        }
-
-        if (strcmp(clientMsg, "***") == 0 || strcmp(clientMsg, "") == 0) {
-            printf("Client closing.\n");
-            break;
-        }
-
-        receivedBytes = recvfrom(sockfd, serverResponse, sizeof(serverResponse), 0, (struct sockaddr *)&serverAddr, &addrLen);
-        if (receivedBytes < 0) {
-            perror("Error: Failed to receive data");
-            break;
-        }
-
-        serverResponse[receivedBytes] = '\0';
-        printf("Alphabets: %s\n", serverResponse);
-
-        receivedBytes = recvfrom(sockfd, serverResponse, sizeof(serverResponse), 0, (struct sockaddr *)&serverAddr, &addrLen);
-        if (receivedBytes < 0) {
-            perror("Error: Failed to receive data");
-            break;
-        }
-
-        serverResponse[receivedBytes] = '\0';
-        printf("Digits: %s\n", serverResponse);
-
         printf("Enter a string (or '***' to exit): ");
+        fgets(buffer, sizeof(buffer), stdin);
+        buffer[strcspn(buffer, "\n")] = '\0';
+
+        if (strcmp(buffer, "***") == 0 || strcmp(buffer, "") == 0) {
+            break;
+        }
+
+        sendto(sockfd, buffer, strlen(buffer), 0, (struct sockaddr *)&serverAddr, sizeof(serverAddr));
+
+        memset(buffer, 0, sizeof(buffer));
+        int n = recvfrom(sockfd, buffer, sizeof(buffer), 0, NULL, NULL);
+
+        if (n < 0) {
+            perror("Receive error");
+            break;
+        }
+
+        printf("Received alphabet string: %s\n", buffer);
+
+        memset(buffer, 0, sizeof(buffer));
+        n = recvfrom(sockfd, buffer, sizeof(buffer), 0, NULL, NULL);
+
+        if (n < 0) {
+            perror("Receive error");
+            break;
+        }
+
+        printf("Received digit string: %s\n", buffer);
     }
 
     close(sockfd);
