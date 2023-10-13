@@ -7,28 +7,51 @@
 
 #define MAX_BUFF_SIZE 1024
 
-// Function to classify input string
-void classifyString(const char *input, char *alphabetStr, char *digitStr, char *errorStr) {
-    int alphaIndex = 0;
-    int digitIndex = 0;
+
+void resolveDomainOrIP(const char *input, char *replyStr, char *errorStr) {
     int hasError = 0;
 
-    for (int i = 0; input[i] != '\0'; i++) {
-        if (isalpha(input[i])) {
-            alphabetStr[alphaIndex++] = input[i];
-        } else if (isdigit(input[i])) {
-            digitStr[digitIndex++] = input[i];
-        } else {
-            hasError = 1;
-            break;
-        }
-    }
+    struct addrinfo hints, *result, *rp;
+    memset(&hints, 0, sizeof(struct addrinfo));
+    hints.ai_family = AF_UNSPEC;  // Chấp nhận cả IPv4 và IPv6
 
-    if (hasError) {
-        strcpy(errorStr, "Error: Input contains non-alphanumeric characters.");
+    int ret = getaddrinfo(input, NULL, &hints, &result);
+    if (ret == 0) {
+        for (rp = result; rp != NULL; rp = rp->ai_next) {
+            if (rp->ai_family == AF_INET) {  // IPv4
+                struct sockaddr_in *ipv4 = (struct sockaddr_in *)rp->ai_addr;
+                strcat(replyStr, "Official IP: %s\n");
+                strcat(replyStr, inet_ntoa(ipv4->sin_addr))
+                
+            } else if (rp->ai_family == AF_INET6) {  // IPv6
+                char ip6str[INET6_ADDRSTRLEN];
+                struct sockaddr_in6 *ipv6 = (struct sockaddr_in6 *)rp->ai_addr;
+                inet_ntop(AF_INET6, &(ipv6->sin6_addr), ip6str, INET6_ADDRSTRLEN);
+                printf("Official IP: %s\n", ip6str);
+            }
+        }
+        freeaddrinfo(result);
     } else {
-        alphabetStr[alphaIndex] = '\0';
-        digitStr[digitIndex] = '\0';
+        struct hostent *hostInfo;
+        if (inet_pton(AF_INET, input, &(struct in_addr){}) == 1) {
+            // Input is a valid IP address
+            hostInfo = gethostbyaddr(input, strlen(input), AF_INET);
+        } else {
+            // Input is considered as a domain name
+            hostInfo = gethostbyname(input);
+        }
+
+        if (hostInfo != NULL) {
+            printf("Official name: %s\n", hostInfo->h_name);
+            printf("Alias name:\n");
+            char **alias = hostInfo->h_aliases;
+            while (*alias != NULL) {
+                printf("%s\n", *alias);
+                alias++;
+            }
+        } else {
+            printf("Not found information\n");
+        }
     }
 }
 
@@ -64,9 +87,9 @@ int main(int argc, char *argv[]) {
     printf("Server is running at port: %d\n", port);
 
     char buffer[MAX_BUFF_SIZE];
-    char alphabetStr[MAX_BUFF_SIZE];
-    char digitStr[MAX_BUFF_SIZE];
-    char errorStr[] = "Error: Input contains non-alphanumeric characters.";
+    char parameter[MAX_BUFF_SIZE];
+    char reply[MAX_BUFF_SIZE];
+    char errorStr[MAX_BUFF_SIZE];
     
     while (1) {
         memset(buffer, 0, sizeof(buffer));
@@ -78,6 +101,7 @@ int main(int argc, char *argv[]) {
             continue;
         }
 
+        resolveDomainOrIP(buffer, replyStr, errorStr);
 
         // int alphaIndex = 0;
         // int digitIndex = 0;
