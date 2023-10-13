@@ -66,7 +66,7 @@ int main(int argc, char *argv[]) {
     char buffer[MAX_BUFF_SIZE];
     char alphabetStr[MAX_BUFF_SIZE];
     char digitStr[MAX_BUFF_SIZE];
-    char errorStr[] = "Error: Input contains non-alphanumeric characters.";
+    char errorStr[MAX_BUFF_SIZE];
     
     while (1) {
         memset(buffer, 0, sizeof(buffer));
@@ -78,6 +78,7 @@ int main(int argc, char *argv[]) {
             continue;
         }
 
+        classifyString(buffer, alphabetStr, digitStr, errorStr);
 
         // int alphaIndex = 0;
         // int digitIndex = 0;
