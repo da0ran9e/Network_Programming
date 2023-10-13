@@ -10,11 +10,10 @@ void sendMessageToServer(int sockfd, const struct sockaddr_in *serverAddr) {
     char buffer[MAX_BUFF_SIZE];
 
     while (1) {
-        printf("Enter a string (or '***' to exit): ");
         fgets(buffer, sizeof(buffer), stdin);
         buffer[strcspn(buffer, "\n")] = '\0';
 
-        if (strcmp(buffer, "***") == 0 || strcmp(buffer, "") == 0) {
+        if (strlen(buffer) <= 1 || strcmp(buffer, "") == 0) {
             break;
         }
 
