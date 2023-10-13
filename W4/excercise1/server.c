@@ -32,11 +32,11 @@ int main(int argc, char *argv[]) {
 
     // Bind the socket to the specified port
     if (bind(sockfd, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) < 0) {
-        perror("Bind error");
+        perror("Bind error: ");
         return 0;
     }
 
-    printf("Server is running at port %d.\n", port);
+    printf("Server is running at port: %d\n", port);
 
     char buffer[MAX_BUFF_SIZE];
     while (1) {
