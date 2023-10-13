@@ -98,9 +98,6 @@ int main(int argc, char *argv[]) {
         if (strlen(errorStr) > 0) {
             sendto(sockfd, errorStr, strlen(errorStr), 0, (struct sockaddr *)&clientAddr, clientAddrLen);
         } else {
-            alphabetStr[alphaIndex] = '\0';
-            digitStr[digitIndex] = '\0';
-
             sendto(sockfd, alphabetStr, strlen(alphabetStr), 0, (struct sockaddr *)&clientAddr, clientAddrLen);
             sendto(sockfd, digitStr, strlen(digitStr), 0, (struct sockaddr *)&clientAddr, clientAddrLen);
         }
