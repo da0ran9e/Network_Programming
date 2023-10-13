@@ -20,14 +20,16 @@ void resolveDomainOrIP(const char *input, char *replyStr, char *errorStr) {
         for (rp = result; rp != NULL; rp = rp->ai_next) {
             if (rp->ai_family == AF_INET) {  // IPv4
                 struct sockaddr_in *ipv4 = (struct sockaddr_in *)rp->ai_addr;
-                strcat(replyStr, "Official IP: %s\n");
+                strcat(replyStr, "Official IP: ");
                 strcat(replyStr, inet_ntoa(ipv4->sin_addr))
                 
             } else if (rp->ai_family == AF_INET6) {  // IPv6
                 char ip6str[INET6_ADDRSTRLEN];
                 struct sockaddr_in6 *ipv6 = (struct sockaddr_in6 *)rp->ai_addr;
                 inet_ntop(AF_INET6, &(ipv6->sin6_addr), ip6str, INET6_ADDRSTRLEN);
-                printf("Official IP: %s\n", ip6str);
+                strcat(replyStr, "Official IP: ");
+                strcat(replyStr, ip6str)
+                
             }
         }
         freeaddrinfo(result);
@@ -42,15 +44,19 @@ void resolveDomainOrIP(const char *input, char *replyStr, char *errorStr) {
         }
 
         if (hostInfo != NULL) {
-            printf("Official name: %s\n", hostInfo->h_name);
-            printf("Alias name:\n");
+            strcat(replyStr, "\nOfficial name: ");
+            strcat(replyStr, hostInfo->h_name);
+            
+            strcat(replyStr, "\nAlias name:");
+            
             char **alias = hostInfo->h_aliases;
             while (*alias != NULL) {
-                printf("%s\n", *alias);
+                strcat(replyStr, "\n");
+                strcat(replyStr, *alias);
                 alias++;
             }
         } else {
-            printf("Not found information\n");
+            strcat(replyStr, "Not found information\n");
         }
     }
 }
