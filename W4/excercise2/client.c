@@ -6,35 +6,15 @@
 
 #define MAX_BUFF_SIZE 1024
 
-void sendMessageToServer(int sockfd, const struct sockaddr_in *serverAddr) {
-    char buffer[MAX_BUFF_SIZE];
-
-    while (1) {
-        fgets(buffer, sizeof(buffer), stdin);
-        buffer[strcspn(buffer, "\n")] = '\0';
-
-        if (strlen(buffer) <= 1 || strcmp(buffer, "") == 0) {
-            break;
-        }
-
-        sendto(sockfd, buffer, strlen(buffer), 0, (struct sockaddr *)serverAddr, sizeof(*serverAddr));
-    }
+// Function to send data to the server
+void sendDataToServer(int sockfd, const char *data, const struct sockaddr *serverAddr, socklen_t len) {
+    sendto(sockfd, data, strlen(data), 0, serverAddr, len);
 }
 
-void receiveAndPrintResults(int sockfd) {
-    char buffer[MAX_BUFF_SIZE];
-
-    while (1) {
-        memset(buffer, 0, sizeof(buffer));
-        int n = recvfrom(sockfd, buffer, sizeof(buffer), 0, NULL, NULL);
-
-        if (n < 0) {
-            perror("Receive error");
-            break;
-        }
-
-        printf("Received: %s\n", buffer);
-    }
+// Function to receive data from the server
+int receiveDataFromServer(int sockfd, char *buffer) {
+    memset(buffer, 0, MAX_BUFF_SIZE);
+    return recvfrom(sockfd, buffer, MAX_BUFF_SIZE, 0, NULL, NULL);
 }
 
 int main(int argc, char *argv[]) {
@@ -49,7 +29,6 @@ int main(int argc, char *argv[]) {
     int sockfd;
     struct sockaddr_in serverAddr;
 
-    // Create a socket
     if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
         perror("Socket creation error");
         return 1;
@@ -57,46 +36,37 @@ int main(int argc, char *argv[]) {
 
     memset(&serverAddr, 0, sizeof(serverAddr));
     serverAddr.sin_family = AF_INET;
-    serverAddr.sin_addr.s_addr = inet_addr(serverIP); //bind to ip address
-    serverAddr.sin_port = htons(port); //bind to port
+    serverAddr.sin_addr.s_addr = inet_addr(serverIP);
+    serverAddr.sin_port = htons(port);
 
-    sendMessageToServer(sockfd, &serverAddr);
+    char buffer[MAX_BUFF_SIZE];
 
-    receiveAndPrintResults(sockfd);
+    while (1) {
+        printf("Enter a string (or '***' to exit): ");
+        fgets(buffer, sizeof(buffer), stdin);
+        buffer[strcspn(buffer, "\n")] = '\0';
 
-    // char buffer[MAX_BUFF_SIZE];
+        if (strcmp(buffer, "***") == 0 || strcmp(buffer, "") == 0) {
+            break;
+        }
 
-    // while (1) {
-    //     printf("Enter a string (or '***' to exit): ");
-    //     fgets(buffer, sizeof(buffer), stdin);
-    //     buffer[strcspn(buffer, "\n")] = '\0';
+        sendDataToServer(sockfd, buffer, (struct sockaddr *)&serverAddr, sizeof(serverAddr));
 
-    //     if (strcmp(buffer, "***") == 0 || strcmp(buffer, "") == 0) {
-    //         break;
-    //     }
+        if (receiveDataFromServer(sockfd, buffer) < 0) {
+            perror("Receive error");
+            break;
+        }
 
-    //     sendto(sockfd, buffer, strlen(buffer), 0, (struct sockaddr *)&serverAddr, sizeof(serverAddr));
+        printf("Received alphabet string: %s\n", buffer);
 
-    //     memset(buffer, 0, sizeof(buffer));
-    //     int n = recvfrom(sockfd, buffer, sizeof(buffer), 0, NULL, NULL);
+        if (receiveDataFromServer(sockfd, buffer) < 0) {
+            perror("Receive error");
+            break;
+        }
 
-    //     if (n < 0) {
-    //         perror("Receive error");
-    //         break;
-    //     }
+        printf("Received digit string: %s\n", buffer);
+    }
 
-    //     printf("Received alphabet string: %s\n", buffer);
-
-    //     memset(buffer, 0, sizeof(buffer));
-    //     n = recvfrom(sockfd, buffer, sizeof(buffer), 0, NULL, NULL);
-
-    //     if (n < 0) {
-    //         perror("Receive error");
-    //         break;
-    //     }
-
-    //     printf("Received digit string: %s\n", buffer);
-    // }
     close(sockfd);
     return 0;
 }
