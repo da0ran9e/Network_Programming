@@ -2,80 +2,80 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
-#include <arpa/inet.h>
 #include <unistd.h>
+#include <arpa/inet.h>
 
-#define MAX_BUF_SIZE 1024
-
-void processString(char *input, char *alphabets, char *digits) {
-    int alphaIndex = 0;
-    int digitIndex = 0;
-
-    for (int i = 0; input[i] != '\0'; i++) {
-        if (isalpha(input[i])) {
-            alphabets[alphaIndex++] = input[i];
-        } else if (isdigit(input[i])) {
-            digits[digitIndex++] = input[i];
-        } else {
-            printf("Error: String contains non-alphabet and non-digit characters.\n");
-            return;
-        }
-    }
-
-    alphabets[alphaIndex] = '\0';
-    digits[digitIndex] = '\0';
-}
+#define MAX_BUFF_SIZE 1024
 
 int main(int argc, char *argv[]) {
     if (argc != 2) {
-        printf("Usage: %s <PortNumber>\n", argv[0]);
+        fprintf(stderr, "Usage: %s PortNumber\n", argv[0]);
         return 1;
     }
 
-    int serverPort = atoi(argv[1]);
+    int port = atoi(argv[1]);
 
-    int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
-    if (sockfd < 0) {
-        perror("Error: Failed to create socket");
-        return 1;
-    }
-
+    int sockfd;
     struct sockaddr_in serverAddr, clientAddr;
-    socklen_t addrLen = sizeof(clientAddr);
+    socklen_t clientAddrLen = sizeof(clientAddr);
+
+    // Create a socket
+    if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+        perror("Socket creation error");
+        return 1;
+    }
 
     memset(&serverAddr, 0, sizeof(serverAddr));
     serverAddr.sin_family = AF_INET;
-    serverAddr.sin_addr.s_addr = INADDR_ANY;
-    serverAddr.sin_port = htons(serverPort);
+    serverAddr.sin_addr.s_addr = htonl(INADDR_ANY);
+    serverAddr.sin_port = htons(port);
 
+    // Bind the socket to the specified port
     if (bind(sockfd, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) < 0) {
-        perror("Error: Bind failed");
-        close(sockfd);
+        perror("Bind error");
         return 1;
     }
 
-    char clientMsg[MAX_BUF_SIZE];
-    char alphabets[MAX_BUF_SIZE];
-    char digits[MAX_BUF_SIZE];
-    int receivedBytes;
+    printf("Server is running at port %d.\n", port);
 
+    char buffer[MAX_BUFF_SIZE];
     while (1) {
-        receivedBytes = recvfrom(sockfd, clientMsg, sizeof(clientMsg), 0, (struct sockaddr *)&clientAddr, &addrLen);
-        if (receivedBytes < 0) {
-            perror("Error: Failed to receive data");
+        memset(buffer, 0, sizeof(buffer));
+        int n = recvfrom(sockfd, buffer, sizeof(buffer), 0, (struct sockaddr *)&clientAddr, &clientAddrLen);
+
+        if (n < 0) {
+            perror("Receive error");
             continue;
         }
 
-        clientMsg[receivedBytes] = '\0';
-        if (strcmp(clientMsg, "***") == 0 || strcmp(clientMsg, "") == 0) {
-            printf("Server shutting down.\n");
-            break;
+        char alphabetStr[MAX_BUFF_SIZE];
+        char digitStr[MAX_BUFF_SIZE];
+        char errorStr[] = "Error: Input contains non-alphanumeric characters.";
+
+        int alphaIndex = 0;
+        int digitIndex = 0;
+        int hasError = 0;
+
+        for (int i = 0; i < n; i++) {
+            if (isalpha(buffer[i])) {
+                alphabetStr[alphaIndex++] = buffer[i];
+            } else if (isdigit(buffer[i])) {
+                digitStr[digitIndex++] = buffer[i];
+            } else {
+                hasError = 1;
+                break;
+            }
         }
 
-        processString(clientMsg, alphabets, digits);
+        if (hasError) {
+            sendto(sockfd, errorStr, strlen(errorStr), 0, (struct sockaddr *)&clientAddr, clientAddrLen);
+        } else {
+            alphabetStr[alphaIndex] = '\0';
+            digitStr[digitIndex] = '\0';
 
-        sendto(sockfd, alphabets, strlen(alphabets), 0, (struct sockaddr *)&clientAddr, addrLen);
-        sendto(sockfd, digits, strlen(digits), 0, (struct sockaddr *)&clientAddr, addrLen);
+            sendto(sockfd, alphabetStr, strlen(alphabetStr), 0, (struct sockaddr *)&clientAddr, clientAddrLen);
+            sendto(sockfd, digitStr, strlen(digitStr), 0, (struct sockaddr *)&clientAddr, clientAddrLen);
+        }
     }
 
     close(sockfd);
