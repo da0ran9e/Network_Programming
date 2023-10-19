@@ -69,8 +69,7 @@ int main(int argc, char *argv[]) {
             perror("Receive error");
             break;
         }
-
-        printf("Received digit string: %s\n", buffer);
+        printf("Alias: %s\n", buffer);
     }
 
     close(sockfd);
