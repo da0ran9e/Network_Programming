@@ -52,24 +52,12 @@ int main(int argc, char *argv[]) {
 
         sendDataToServer(sockfd, buffer, (struct sockaddr *)&serverAddr, sizeof(serverAddr));
 
-        if (receiveDataFromServer(sockfd, buffer) < 0) {
-            break;
-        }
-
-        printf("Official IP:\n%s\n", buffer);
-
-        if (receiveDataFromServer(sockfd, buffer) < 0) {
-            break;
-        }
-
-        printf("Official name:\n%s\n", buffer);
-
 
         if (receiveDataFromServer(sockfd, buffer) < 0) {
             perror("Receive error");
             break;
         }
-        printf("Alias: %s\n", buffer);
+        printf("%s\n", buffer);
     }
 
     close(sockfd);
