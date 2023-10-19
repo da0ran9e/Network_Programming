@@ -8,6 +8,60 @@
 
 #define MAX_BUFF_SIZE 1024
 
+
+int resolveDomainOrIP(const char *param, char output[]) {
+    char tmp[];
+    int offset = 0;
+
+    struct hostent *host_info;
+    struct in_addr ipv4_addr;
+    char **alias;
+
+    if (inet_aton(param, &ipv4_addr)) {
+        // Input is a valid IP address
+        host_info = gethostbyaddr(&ipv4_addr, sizeof(struct in_addr), AF_INET);
+        if (host_info == NULL) {
+            strcat(tmp, "Not found information\n");
+            return;
+        }
+        strcat(tmp, "Official name: ");
+        strcat(tmp, host_info->h_name);
+        strcat(tmp, "\n");
+        
+        alias = host_info->h_aliases;
+        strcat(tmp,"Alias name:\n");
+        while (*alias) {
+            strcat(tmp,*alias);
+            strcat(tmp, "\n");
+            alias++;
+        }
+    } else {
+        // Input is a domain name
+        host_info = gethostbyname(param);
+        if (host_info == NULL) {
+            strcat(tmp,"Not found information\n");
+            return;
+        }
+        strcat(tmp,"Official IP: ");
+        strcat(tmp,inet_ntoa(*(struct in_addr *)host_info->h_addr));
+        strcat(tmp,"\n");
+    
+        alias = host_info->h_addr_list;
+        strcat(tmp,"Alias IP:\n");
+       
+        while (*alias) {
+            strcat(tmp,inet_ntoa(*(struct in_addr *)*alias));
+            strcat(tmp,"\n");
+            alias++;
+        }
+    }
+
+    for (int i=0; i<strlen(tmp); i++){
+        output[offset++] = tmp[i];
+    }
+}
+
+
 int main(int argc, char *argv[]) {
     if (argc != 2) {
         fprintf(stderr, "Usage: %s PortNumber\n", argv[0]);
@@ -49,82 +103,21 @@ int main(int argc, char *argv[]) {
             continue;
         }
 
-        int ipOffset = 0;
-        int nameOffset = 0;
-        int aliasOffset = 0;
+        int replyOffset = 0;
 
-        char ipStr[MAX_BUFF_SIZE];
-        char nameStr[MAX_BUFF_SIZE];
-        char aliasStr[MAX_BUFF_SIZE];
+        char replyStr[MAX_BUFF_SIZE];
         char errorStr[] = "Error: Notfound information.";
 
         int hasError = 0;
 
-        struct addrinfo hints, *result, *rp;
-        memset(&hints, 0, sizeof(struct addrinfo));
-        hints.ai_family = AF_UNSPEC;  // Chấp nhận cả IPv4 và IPv6
-
-        int ret = getaddrinfo(buffer, NULL, &hints, &result);
-        if (ret == 0) {
-            for (rp = result; rp != NULL; rp = rp->ai_next) {
-                if (rp->ai_family == AF_INET) {  // IPv4
-                    struct sockaddr_in *ipv4 = (struct sockaddr_in *)rp->ai_addr;
-                    char ip[] = inet_ntoa(ipv4->sin_addr);
-                    for (int i = 0; i < strlen(ip); i++){
-                        ipStr[ipOffset++] = ip[i];
-                    }
-                    
-                } else if (rp->ai_family == AF_INET6) {  // IPv6
-                    char ip6str[INET6_ADDRSTRLEN];
-                    struct sockaddr_in6 *ipv6 = (struct sockaddr_in6 *)rp->ai_addr;
-                    inet_ntop(AF_INET6, &(ipv6->sin6_addr), ip6str, INET6_ADDRSTRLEN);
-                    
-                    char ip[] = ip6str;
-                    for (int i = 0; i < strlen(ip); i++){
-                        ipStr[ipOffset++] = ip[i];
-                    }
-                    
-                }
-            }
-            freeaddrinfo(result);
-        } else {
-            struct hostent *hostInfo;
-            if (inet_pton(AF_INET, buffer, &(struct in_addr){}) == 1) {
-                // Input is a valid IP address
-                hostInfo = gethostbyaddr(buffer, strlen(buffer), AF_INET);
-            } else {
-                // Input is considered as a domain name
-                hostInfo = gethostbyname(buffer);
-            }
-
-            if (hostInfo != NULL) {
-                char name[] = hostInfo->h_name;
-                
-                char aliasTemp[];
-                char **alias = hostInfo->h_addr_list;
-                while (*alias != NULL) {
-                    strcat(aliasTemp, *alias);
-                    strcat(aliasTemp, "\n");
-                    alias++;
-                }
-                for (int i = 0; i < strlen(aliasTemp); i++){
-                        aliasStr[aliasOffset++] = aliasTemp[i];
-                    }
-            } else {
-                hasError = 1;
-            }
-        }
+        replyOffset = resolveDomainOrIP(buffer, replyStr);
 
         if (hasError) {
             sendto(sockfd, errorStr, strlen(errorStr), 0, (struct sockaddr *)&clientAddr, clientAddrLen);
         } else {
-            ipStr[ipOffset] = '\0';
-            nameStr[nameOffset] = '\0';
-            aliasStr[aliasOffset] = '\0';
+            replyStr[replyOffset] = '\0';
 
-            sendto(sockfd, ipStr, strlen(ipStr), 0, (struct sockaddr *)&clientAddr, clientAddrLen);
-            sendto(sockfd, nameStr, strlen(nameStr), 0, (struct sockaddr *)&clientAddr, clientAddrLen);
-            sendto(sockfd, aliasStr, strlen(aliasStr), 0, (struct sockaddr *)&clientAddr, clientAddrLen);
+            sendto(sockfd, replyStr, strlen(replyStr), 0, (struct sockaddr *)&clientAddr, clientAddrLen);
         }
     }
 
