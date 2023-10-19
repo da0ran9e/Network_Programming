@@ -10,7 +10,7 @@
 
 
 int resolveDomainOrIP(const char *param, char output[]) {
-    char tmp[];
+    char tmp[MAX_BUFF_SIZE];
     int offset = 0;
 
     struct hostent *host_info;
