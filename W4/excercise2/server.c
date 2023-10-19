@@ -22,7 +22,7 @@ int resolveDomainOrIP(const char *param, char output[]) {
         host_info = gethostbyaddr(&ipv4_addr, sizeof(struct in_addr), AF_INET);
         if (host_info == NULL) {
             strcat(tmp, "Not found information\n");
-            return;
+            return -1;
         }
         strcat(tmp, "Official name: ");
         strcat(tmp, host_info->h_name);
@@ -40,7 +40,7 @@ int resolveDomainOrIP(const char *param, char output[]) {
         host_info = gethostbyname(param);
         if (host_info == NULL) {
             strcat(tmp,"Not found information\n");
-            return;
+            return -1;
         }
         strcat(tmp,"Official IP: ");
         strcat(tmp,inet_ntoa(*(struct in_addr *)host_info->h_addr));
@@ -113,6 +113,8 @@ int main(int argc, char *argv[]) {
         int hasError = 0;
 
         replyOffset = resolveDomainOrIP(buffer, replyStr);
+
+        if (replyOffset == -1) hasError = 1;
 
         if (hasError) {
             sendto(sockfd, errorStr, strlen(errorStr), 0, (struct sockaddr *)&clientAddr, clientAddrLen);
