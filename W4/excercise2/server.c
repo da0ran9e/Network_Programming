@@ -64,7 +64,7 @@ int main(int argc, char *argv[]) {
         memset(&hints, 0, sizeof(struct addrinfo));
         hints.ai_family = AF_UNSPEC;  // Chấp nhận cả IPv4 và IPv6
 
-        int ret = getaddrinfo(input, NULL, &hints, &result);
+        int ret = getaddrinfo(buffer, NULL, &hints, &result);
         if (ret == 0) {
             for (rp = result; rp != NULL; rp = rp->ai_next) {
                 if (rp->ai_family == AF_INET) {  // IPv4
@@ -89,12 +89,12 @@ int main(int argc, char *argv[]) {
             freeaddrinfo(result);
         } else {
             struct hostent *hostInfo;
-            if (inet_pton(AF_INET, input, &(struct in_addr){}) == 1) {
+            if (inet_pton(AF_INET, buffer, &(struct in_addr){}) == 1) {
                 // Input is a valid IP address
-                hostInfo = gethostbyaddr(input, strlen(input), AF_INET);
+                hostInfo = gethostbyaddr(buffer, strlen(buffer), AF_INET);
             } else {
                 // Input is considered as a domain name
-                hostInfo = gethostbyname(input);
+                hostInfo = gethostbyname(buffer);
             }
 
             if (hostInfo != NULL) {
