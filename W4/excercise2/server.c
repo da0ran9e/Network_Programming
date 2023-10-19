@@ -59,6 +59,8 @@ int resolveDomainOrIP(const char *param, char output[]) {
     for (int i=0; i<strlen(tmp); i++){
         output[offset++] = tmp[i];
     }
+
+    return offset;
 }
 
 
