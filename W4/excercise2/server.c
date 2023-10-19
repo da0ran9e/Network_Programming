@@ -153,12 +153,16 @@ int main(int argc, char *argv[]) {
             if (hostInfo != NULL) {
                 char name[] = hostInfo->h_name;
                 
-  
+                char aliasTemp[];
                 char **alias = hostInfo->h_addr_list;
                 while (*alias != NULL) {
-                    strcat(aliasStr, *alias);
+                    strcat(aliasTemp, *alias);
+                    strcat(aliasTemp, "\n");
                     alias++;
                 }
+                for (int i = 0; i < strlen(aliasTemp); i++){
+                        aliasStr[aliasOffset++] = aliasTemp[i];
+                    }
             } else {
                 hasError = 1;
             }
@@ -167,11 +171,13 @@ int main(int argc, char *argv[]) {
         if (hasError) {
             sendto(sockfd, errorStr, strlen(errorStr), 0, (struct sockaddr *)&clientAddr, clientAddrLen);
         } else {
-            alphabetStr[alphaIndex] = '\0';
-            digitStr[digitIndex] = '\0';
+            ipStr[ipOffset] = '\0';
+            nameStr[nameOffset] = '\0';
+            aliasStr[aliasOffset] = '\0';
 
-            sendto(sockfd, alphabetStr, strlen(alphabetStr), 0, (struct sockaddr *)&clientAddr, clientAddrLen);
-            sendto(sockfd, digitStr, strlen(digitStr), 0, (struct sockaddr *)&clientAddr, clientAddrLen);
+            sendto(sockfd, ipStr, strlen(ipStr), 0, (struct sockaddr *)&clientAddr, clientAddrLen);
+            sendto(sockfd, nameStr, strlen(nameStr), 0, (struct sockaddr *)&clientAddr, clientAddrLen);
+            sendto(sockfd, aliasStr, strlen(aliasStr), 0, (struct sockaddr *)&clientAddr, clientAddrLen);
         }
     }
 
