@@ -8,59 +8,6 @@
 
 #define MAX_BUFF_SIZE 1024
 
-void resolveDomainOrIP(const char *input) {
-    int hasError = 0;
-
-    struct addrinfo hints, *result, *rp;
-    memset(&hints, 0, sizeof(struct addrinfo));
-    hints.ai_family = AF_UNSPEC;  // Chấp nhận cả IPv4 và IPv6
-
-    int ret = getaddrinfo(input, NULL, &hints, &result);
-    if (ret == 0) {
-        for (rp = result; rp != NULL; rp = rp->ai_next) {
-            if (rp->ai_family == AF_INET) {  // IPv4
-                struct sockaddr_in *ipv4 = (struct sockaddr_in *)rp->ai_addr;
-                strcat(replyStr, "Official IP: ");
-                strcat(replyStr, inet_ntoa(ipv4->sin_addr))
-                
-            } else if (rp->ai_family == AF_INET6) {  // IPv6
-                char ip6str[INET6_ADDRSTRLEN];
-                struct sockaddr_in6 *ipv6 = (struct sockaddr_in6 *)rp->ai_addr;
-                inet_ntop(AF_INET6, &(ipv6->sin6_addr), ip6str, INET6_ADDRSTRLEN);
-                strcat(replyStr, "Official IP: ");
-                strcat(replyStr, ip6str)
-                
-            }
-        }
-        freeaddrinfo(result);
-    } else {
-        struct hostent *hostInfo;
-        if (inet_pton(AF_INET, input, &(struct in_addr){}) == 1) {
-            // Input is a valid IP address
-            hostInfo = gethostbyaddr(input, strlen(input), AF_INET);
-        } else {
-            // Input is considered as a domain name
-            hostInfo = gethostbyname(input);
-        }
-
-        if (hostInfo != NULL) {
-            strcat(replyStr, "\nOfficial name: ");
-            strcat(replyStr, hostInfo->h_name);
-            
-            strcat(replyStr, "\nAlias name:");
-            
-            char **alias = hostInfo->h_aliases;
-            while (*alias != NULL) {
-                strcat(replyStr, "\n");
-                strcat(replyStr, *alias);
-                alias++;
-            }
-        } else {
-            strcat(replyStr, "Not found information\n");
-        }
-    }
-}
-
 int main(int argc, char *argv[]) {
     if (argc != 2) {
         fprintf(stderr, "Usage: %s PortNumber\n", argv[0]);
