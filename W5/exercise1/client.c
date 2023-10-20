@@ -1,20 +1,23 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include <arpa/inet.h>
-#include <sys/socket.h>
 
 #define MAXLINE 1024
 
-int main(int argc, char* argv[]) {
+int main(int argc, char *argv[]) {
     if (argc != 3) {
-        printf("Usage: %s IP_Addr Port_Number\n", argv[0]);
+        fprintf(stderr, "Usage: %s <IP_Addr> <Port_Number>\n", argv[0]);
         exit(1);
     }
 
     int sockfd;
     char buffer[MAXLINE];
     struct sockaddr_in servaddr;
+
+    char *IP_ADDR = argv[1];
+    int PORT = atoi(argv[2]);
 
     // Create socket
     if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
@@ -24,9 +27,9 @@ int main(int argc, char* argv[]) {
 
     memset(&servaddr, 0, sizeof(servaddr));
     servaddr.sin_family = AF_INET;
-    servaddr.sin_port = htons(atoi(argv[2]));
+    servaddr.sin_port = htons(PORT);
 
-    if (inet_pton(AF_INET, argv[1], &servaddr.sin_addr) <= 0) {
+    if (inet_pton(AF_INET, IP_ADDR, &servaddr.sin_addr) <= 0) {
         perror("inet_pton");
         exit(1);
     }
@@ -43,9 +46,12 @@ int main(int argc, char* argv[]) {
             break;
         }
 
-        send(sockfd, buffer, strlen(buffer), 0);
+        if (send(sockfd, buffer, strlen(buffer), 0) == -1) {
+            perror("send");
+            break;
+        }
 
-        int n = recv(sockfd, buffer, MAXLINE, 0);
+        ssize_t n = recv(sockfd, buffer, MAXLINE, 0);
         if (n <= 0) {
             perror("recv");
             break;
@@ -56,6 +62,6 @@ int main(int argc, char* argv[]) {
     }
 
     close(sockfd);
-
+    
     return 0;
 }
