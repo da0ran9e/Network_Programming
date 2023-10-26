@@ -63,7 +63,7 @@ int main(int argc, char *argv[]) {
 
         // Check if file exists
         if (access(filepath, F_OK) == -1) {
-            fprintf(stderr, "Error: File '%s' not found.\n", buffer);
+            fprintf(stderr, "Error: File '%s' not found at: %s\n", buffer, filepath);
             continue;
         }
 
