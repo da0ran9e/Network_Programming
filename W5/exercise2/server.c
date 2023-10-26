@@ -70,11 +70,11 @@ int main(int argc, char *argv[]) {
         strcat(filepath, buffer);
 
         // Check if file already exists
-        if (access(buffer, F_OK) != -1) {
-            fprintf(stderr, "Error: File '%s' already exists on the server.\n", buffer);
-            close(clientSocket);
-            continue;
-        }
+        // if (access(buffer, F_OK) != -1) {
+        //     fprintf(stderr, "Error: File '%s' already exists on the server.\n", buffer);
+        //     close(clientSocket);
+        //     continue;
+        // }
 
         // Create and open the file for writing
         FILE *file = fopen(filepath, "wb");
