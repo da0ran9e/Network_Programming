@@ -66,6 +66,9 @@ int main(int argc, char *argv[]) {
             continue;
         }
 
+        char filepath[MAX_BUFFER_SIZE] = "server_folder/";
+        strcat(filepath, buffer);
+
         // Check if file already exists
         if (access(buffer, F_OK) != -1) {
             fprintf(stderr, "Error: File '%s' already exists on the server.\n", buffer);
@@ -74,7 +77,7 @@ int main(int argc, char *argv[]) {
         }
 
         // Create and open the file for writing
-        FILE *file = fopen(buffer, "wb");
+        FILE *file = fopen(filepath, "wb");
         if (file == NULL) {
             perror("fopen");
             close(clientSocket);
