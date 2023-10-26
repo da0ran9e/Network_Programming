@@ -58,7 +58,7 @@ int main(int argc, char *argv[]) {
             break; // Exit if the input is blank
         }
 
-        char filepath[MAX_BUFFER_SIZE] = "cliennt_folder/";
+        char filepath[MAX_BUFFER_SIZE] = "client_folder/";
         strcat(filepath, buffer);
 
         // Check if file exists
