@@ -58,8 +58,11 @@ int main(int argc, char *argv[]) {
             break; // Exit if the input is blank
         }
 
+        char filepath[MAX_BUFFER_SIZE] = "cliennt_folder/";
+        strcat(filepath, buffer);
+
         // Check if file exists
-        if (access(buffer, F_OK) == -1) {
+        if (access(filepath, F_OK) == -1) {
             fprintf(stderr, "Error: File '%s' not found.\n", buffer);
             continue;
         }
@@ -71,7 +74,7 @@ int main(int argc, char *argv[]) {
         }
 
         // Open and send file data
-        FILE *file = fopen(buffer, "rb");
+        FILE *file = fopen(filepath, "rb");
         if (file == NULL) {
             perror("fopen");
             break;
