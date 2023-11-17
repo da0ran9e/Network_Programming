@@ -1,23 +1,13 @@
 CC = gcc
-CFLAGS = -Wall -pthread
+CFLAGS = -Wall
 
-SERVER = tcp_thread_server.o echo.o
-CLIENT = tcp_thread_client.o echo.o
+all: server client
 
-SERVER_NAME = server
-CLIENT_NAME = client
+server: server.c
+	$(CC) $(CFLAGS) -o server server.c
 
-all: $(SERVER_NAME) $(CLIENT_NAME)
-	@echo "*** Build complete! ***"
-
-
-# Exercise 1
-$(SERVER_NAME): $(SERVER)
-	$(CC) $(CFLAGS) $(SERVER) -o $(SERVER_NAME)
-
-$(CLIENT_NAME): $(CLIENT)
-	$(CC) $(CFLAGS) $(CLIENT) -o $(CLIENT_NAME)
-
+client: client.c
+	$(CC) $(CFLAGS) -o client client.c
 
 clean:
-	rm -f $(SERVER) $(SERVER_NAME) $(CLIENT) $(CLIENT_NAME)
+	rm -f server client
