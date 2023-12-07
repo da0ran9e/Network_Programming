@@ -38,13 +38,10 @@ int initialize_client(int port, char * inputAddr) {
 }
 
 void run_client(int client_sock) {
-	//Step 4: Communicate with server
-	printf("Client started.\n");
 	client_echo(client_sock);
 }
 
 void cleanup_client(int client_sock) {
-	//Step 5: Close socket
 	close(client_sock);
 }
 
