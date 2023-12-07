@@ -14,6 +14,7 @@
 #include "server/include/file_handler.h"
 #include "server/include/caesar.h"
 
+#define BACKLOG 20
 
 void send_file_to_socket(int sockfd) {
 	int sent, offset;
@@ -59,10 +60,7 @@ void send_file_to_socket(int sockfd) {
 
 	newMsg.length = 0;
 	memset(newMsg.payload, 0, BUFFER);
-	sent = sendMessage(sockfd, &newMsg);	// Final message
-	if (sent < 0) {
-
-	}
+	sent = sendMessage(sockfd, &newMsg);	
 }
 
 char fileBuffer[5120];
