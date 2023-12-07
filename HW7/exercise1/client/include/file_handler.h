@@ -7,7 +7,7 @@
 #ifndef FILE_HANDLER_H
 #define FILE_HANDLER_H
 
-void delete(char * file);
-void save(char * data);
+void deleteFile(char * file);
+void saveFile(char * data);
 
 #endif
