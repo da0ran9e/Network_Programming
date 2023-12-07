@@ -16,219 +16,221 @@
 
 #define BACKLOG 20
 
-void send_file_to_socket(int sockfd) {
-	int sent, offset;
-	ServerMessage newMsg;
-	newMsg.opcode = 2;
+#define MAX_BUFFER_SIZE 5120
 
-    struct dirent* entry;
-    struct stat entryStat;
-    time_t lastModifiedTime = 0;
-    char* lastModifiedFile = NULL;
+void sendLatestFileToSocket(int clientSocket) {
+    int sent, bytesRead;
+    ServerMessage message;
+    message.opcode = 2;
 
-	DIR* directory = opendir(folderPath);
-    if (directory == NULL) {
-        perror("Error opening directory");
-        return NULL;
+    char* latestFileName = getLatestFileName();
+    FILE* file = fopen(latestFileName, "rb");
+
+    while ((bytesRead = fread(message.payload, 1, BUFFER_SIZE, file)) > 0) {
+        message.length = bytesRead;
+        message.payload[bytesRead] = '\0';
+        sent = sendMessage(clientSocket, &message);
     }
 
-    while ((entry = readdir(directory)) != NULL) {
-        char filePath[PATH_MAX];
-        snprintf(filePath, sizeof(filePath), "%s/%s", folderPath, entry->d_name);
+    fclose(file);
+    free(latestFileName);
 
-        if (stat(filePath, &entryStat) == 0) {
-            if (S_ISREG(entryStat.st_mode) && entryStat.st_mtime > lastModifiedTime) {
-                lastModifiedTime = entryStat.st_mtime;
-                if (lastModifiedFile != NULL) {
-                    free(lastModifiedFile);
-                }
-                lastModifiedFile = strdup(entry->d_name);
-            }
-        }
-    }
+    message.length = 0;
+    memset(message.payload, 0, BUFFER_SIZE);
 
-    closedir(directory);
-
-	FILE * file_data = fopen(lastModifiedFile, "rb");
-
-	while((offset = fread(newMsg.payload, 1, BUFFER, file_data)) > 0) {
-		newMsg.length = offset;
-		newMsg.payload[offset] = '\0';
-	}
-
-	fclose(file_data);
-
-	newMsg.length = 0;
-	memset(newMsg.payload, 0, BUFFER);
-	sent = sendMessage(sockfd, &newMsg);	
+    sent = sendMessage(clientSocket, &message);
 }
 
-char fileBuffer[5120];
+void receiveFileFromSocket(int clientSocket, int editMode, int encryptionKey) {
+    int bytesRead;
+    ServerMessage message;
+    char fileBuffer[MAX_BUFFER_SIZE] = {0};
 
-void recv_file_from_socket(int sockfd, int editmode, int key) {
-	int bytes_received;
-	ServerMessage newMsg;
+    while (1) {
+        bytesRead = recvMessage(clientSocket, &message);
 
-	while(1) {
-		bytes_received = recvMessage(sockfd, &newMsg);
-		if (bytes_received < 0) {
-			break;
-		}
+        if (bytesRead < 0 || message.length == 0) {
+            break;
+        }
 
-		if (newMsg.length == 0) { //endoffile
-			break;
-		}
+        applyEditOperation(message.payload, editMode, encryptionKey);
+        strcat(fileBuffer, message.payload);
+    }
 
-		edit(newMsg.payload, editmode, key);
-		strcat(fileBuffer, newMsg.payload);  
-	}
     save(fileBuffer);
 }
 
-void edit(char * content, int editmode, int key) {
-	switch (editmode) {
-		case 0:
-			encrypt(content, key);
-			break;
-		case 1:
-			decrypt(content, key);
-			break;
-		default:
-            printf("ERROR: opcode notfound!\n");
+void applyEditOperation(char* content, int editMode, int key) {
+    switch (editMode) {
+        case 0:
+            encrypt(content, key);
+            break;
+        case 1:
+            decrypt(content, key);
+            break;
+        default:
+            printf("ERROR: Invalid opcode!\n");
             return;
-	}
+    }
 }
 
-void handle_msg(int sockfd, ServerMessage * msg) {
-	int key = atoi(msg->payload);
-	int editmode = msg->opcode;
+void handleMessage(int clientSocket, ServerMessage* receivedMessage) {
+    int encryptionKey = atoi(receivedMessage->payload);
+    int editMode = receivedMessage->opcode;
 
-	recv_file_from_socket(sockfd, filename, editmode, key);
-
-	send_file_to_socket(sockfd, filename);
-
-	delete_file(filename);
+    receiveFileFromSocket(clientSocket, editMode, encryptionKey);
+    sendLatestFileToSocket(clientSocket);
+    deleteFile(getLatestFileName());
 }
 
-void run(int listening_socket) {
-	int maxi, maxfd;
-	int client[FD_SETSIZE];
-	fd_set	readfds, allset;
+void runServer(int listeningSocket) {
+    int maxFileDescriptor, maxIndex, newClientSocket;
+    int clientSockets[FD_SETSIZE];
+    fd_set allSet, readSet;
 
-	maxfd = listening_socket;
-	maxi = -1;					
-	for (int i = 0; i < FD_SETSIZE; i++)
-		client[i] = -1;			
-	FD_ZERO(&allset);
-	FD_SET(listening_socket, &allset);
-	socklen_t clilen;
-	struct sockaddr_in cliaddr;
+    maxFileDescriptor = listeningSocket;
+    maxIndex = -1;
 
-	int connfd, sockfd;
-	int nready;
-	while (1) {
-		readfds = allset;		/* structure assignment */
-		nready = select(maxfd+1, &readfds, NULL, NULL, NULL);
-		if(nready < 0) {
-			perror("\nError: ");
-			return;
-		}
-		
-		if (FD_ISSET(listening_socket, &readfds)) {	/* new client connection */
-			clilen = sizeof(cliaddr);
-			if((connfd = accept(listening_socket, (struct sockaddr *) &cliaddr, &clilen)) < 0) {
-				perror("\nError: ");
-			} else {
-				printf("You got a connection from %s\n", inet_ntoa(cliaddr.sin_addr)); /* prints client's IP */
-				int count;
-				for (count = 0; count < FD_SETSIZE; count++)
-					if (client[count] < 0) {
-						client[count] = connfd;	/* save descriptor */
-						break;
-					}
-				if (count == FD_SETSIZE){
-					printf("\nToo many clients");
-					close(connfd);
-				}
+    for (int i = 0; i < FD_SETSIZE; i++)
+        clientSockets[i] = -1;
 
-				FD_SET(connfd, &allset);	/* add new descriptor to set */
-				if (connfd > maxfd) {
-					maxfd = connfd;		/* for select */
-				}
-				
-				if (count > maxi) {
-					maxi = count;		/* max index in client[] array */
-				}
+    FD_ZERO(&allSet);
+    FD_SET(listeningSocket, &allSet);
 
-				if (--nready <= 0) continue;		/* no more readable descriptors */
-			}
-		}
+    socklen_t clientAddressLength;
+    struct sockaddr_in clientAddress;
 
-		ServerMessage receivedMessage;
-		for (int i = 0; i <= maxi; i++) {	/* check all clients for data */
-			if ( (sockfd = client[i]) < 0) {
-				continue;
-			}
+    int nReady;
+    while (1) {
+        readSet = allSet;
 
-			if (FD_ISSET(sockfd, &readfds)) {
-				ssize_t bytes_received = recvMessage(sockfd, &receivedMessage);
-				if (bytes_received <= 0) {
-					FD_CLR(sockfd, &allset);
-					close(sockfd);
-					client[i] = -1;
-				} else {
-					handle_msg(sockfd, &receivedMessage);
-				}
+        nReady = select(maxFileDescriptor + 1, &readSet, NULL, NULL, NULL);
 
-				if (--nready <= 0) break;		/* no more readable descriptors */
-			}
-		}
-	}
+        if (nReady < 0) {
+            perror("\nError: ");
+            return;
+        }
+
+        if (FD_ISSET(listeningSocket, &readSet)) {
+            clientAddressLength = sizeof(clientAddress);
+
+            if ((newClientSocket = accept(listeningSocket, (struct sockaddr*)&clientAddress, &clientAddressLength)) < 0) {
+                perror("\nError: ");
+            } else {
+                handleNewConnection(newClientSocket, &allSet, clientSockets, &maxFileDescriptor, &maxIndex);
+
+                if (--nReady <= 0) {
+                    continue;  // No more readable descriptors
+                }
+            }
+        }
+
+        handleClientMessages(clientSockets, &readSet, &nReady);
+    }
 }
 
-int init(int port) {
-	int listening_socket;			/* file descriptors */
-	struct sockaddr_in server;	/* server's address information */
+void handleNewConnection(int newClientSocket, fd_set* allSet, int clientSockets[], int* maxFileDescriptor, int* maxIndex) {
+    printf("New connection from %s\n", getClientAddress(newClientSocket));  // Function not provided; replace with your implementation
 
-	if ((listening_socket=socket(AF_INET, SOCK_STREAM, 0)) == -1 ) {	/* calls socket() */
-		printf("socket() error\n");
-		exit(1);
-	}
-	
-	memset(&server, 0, sizeof(server));
-	server.sin_family = AF_INET;
-	server.sin_port = htons(port);
-	server.sin_addr.s_addr = htonl(INADDR_ANY);	/* INADDR_ANY puts your IP address automatically */
+    int i;
+    for (i = 0; i < FD_SETSIZE; i++) {
+        if (clientSockets[i] < 0) {
+            clientSockets[i] = newClientSocket;
+            break;
+        }
+    }
 
-	if(bind(listening_socket, (struct sockaddr*)&server, sizeof(server))==-1) { 
-		perror("\nError bind: ");
-		close(listening_socket);
-		exit(1);
-	}
+    if (i == FD_SETSIZE) {
+        printf("\nToo many clients");
+        close(newClientSocket);
+    }
 
-	if(listen(listening_socket, BACKLOG) == -1){
-		perror("\nError listen: ");
-		close(listening_socket);
-		exit(1);
-	}
+    FD_SET(newClientSocket, allSet);
 
-	printf("Server created.\n\n");
-	return listening_socket;
+    if (newClientSocket > *maxFileDescriptor) {
+        *maxFileDescriptor = newClientSocket;
+    }
+
+    if (i > *maxIndex) {
+        *maxIndex = i;
+    }
 }
 
+void handleClientMessages(int clientSockets[], fd_set* readSet, int* nReady) {
+    ServerMessage receivedMessage;
 
-int main(int argc, char *argv[]){
-	if (argc != 2) {
-		printf("Usage: %s PortNumber\n", argv[0]);
-		exit(1);
-	}
-	
-	int listening_socket; /* file descriptors */
+    for (int i = 0; i <= *maxIndex; i++) {
+        int clientSocket = clientSockets[i];
 
-	listening_socket = init(atoi(argv[1]));
+        if (clientSocket < 0) {
+            continue;
+        }
 
-	run(listening_socket);
-	close(listening_socket);
-	
-	return 0;
+        if (FD_ISSET(clientSocket, readSet)) {
+            ssize_t bytesRead = recvMessage(clientSocket, &receivedMessage);
+
+            if (bytesRead <= 0) {
+                closeClientSocket(clientSocket, readSet, clientSockets);
+            } else {
+                handleMessage(clientSocket, &receivedMessage);
+
+                if (--(*nReady) <= 0) {
+                    break;  // No more readable descriptors
+                }
+            }
+        }
+    }
+}
+
+void closeClientSocket(int clientSocket, fd_set* allSet, int clientSockets[]) {
+    FD_CLR(clientSocket, allSet);
+    close(clientSocket);
+    clientSockets[i] = -1;
+}
+
+int initializeServer(int port) {
+    int listeningSocket;
+    struct sockaddr_in serverAddress;
+
+    if ((listeningSocket = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
+        printf("socket() error\n");
+        exit(1);
+    }
+
+    memset(&serverAddress, 0, sizeof(serverAddress));
+    serverAddress.sin_family = AF_INET;
+    serverAddress.sin_port = htons(port);
+    serverAddress.sin_addr.s_addr = htonl(INADDR_ANY);
+
+    if (bind(listeningSocket, (struct sockaddr*)&serverAddress, sizeof(serverAddress)) == -1) {
+        perror("\nError bind: ");
+        close(listeningSocket);
+        exit(1);
+    }
+
+    if (listen(listeningSocket, BACKLOG) == -1) {
+        perror("\nError listen: ");
+        close(listeningSocket);
+        exit(1);
+    }
+
+    printf("Server created.\n\n");
+    return listeningSocket;
+}
+
+int main(int argc, char* argv[]) {
+    if (argc != 2) {
+        printf("Usage: %s PortNumber\n", argv[0]);
+        exit(1);
+    }
+
+    int listeningSocket;
+
+    listeningSocket = initializeServer(atoi(argv[1]));
+
+    runServer(listeningSocket);
+
+    close(listeningSocket);
+
+    return 0;
 }
