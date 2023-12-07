@@ -15,52 +15,78 @@
 #include "server/include/caesar.h"
 
 #define BACKLOG 20
+#define BUFFER_SIZE 5120
 
-#define MAX_BUFFER_SIZE 5120
+void sendFileToSocket(int sockfd, const char* folderPath) {
+    int sent, offset;
+    ServerMessage newMsg;
+    newMsg.opcode = 2;
 
-void sendLatestFileToSocket(int clientSocket) {
-    int sent, bytesRead;
-    ServerMessage message;
-    message.opcode = 2;
+    struct dirent* entry;
+    struct stat entryStat;
+    time_t lastModifiedTime = 0;
+    char* lastModifiedFile = NULL;
 
-    char* latestFileName = getLatestFileName();
-    FILE* file = fopen(latestFileName, "rb");
-
-    while ((bytesRead = fread(message.payload, 1, BUFFER_SIZE, file)) > 0) {
-        message.length = bytesRead;
-        message.payload[bytesRead] = '\0';
-        sent = sendMessage(clientSocket, &message);
+    DIR* directory = opendir(folderPath);
+    if (directory == NULL) {
+        perror("Error opening directory");
+        return;
     }
 
-    fclose(file);
-    free(latestFileName);
+    while ((entry = readdir(directory)) != NULL) {
+        char filePath[PATH_MAX];
+        snprintf(filePath, sizeof(filePath), "%s/%s", folderPath, entry->d_name);
 
-    message.length = 0;
-    memset(message.payload, 0, BUFFER_SIZE);
+        if (stat(filePath, &entryStat) == 0) {
+            if (S_ISREG(entryStat.st_mode) && entryStat.st_mtime > lastModifiedTime) {
+                lastModifiedTime = entryStat.st_mtime;
+                if (lastModifiedFile != NULL) {
+                    free(lastModifiedFile);
+                }
+                lastModifiedFile = strdup(entry->d_name);
+            }
+        }
+    }
 
-    sent = sendMessage(clientSocket, &message);
+    closedir(directory);
+
+    FILE* fileData = fopen(lastModifiedFile, "rb");
+
+    while ((offset = fread(newMsg.payload, 1, BUFFER_SIZE, fileData)) > 0) {
+        newMsg.length = offset;
+        newMsg.payload[offset] = '\0';
+    }
+
+    fclose(fileData);
+
+    newMsg.length = 0;
+    memset(newMsg.payload, 0, BUFFER_SIZE);
+    sent = sendMessage(sockfd, &newMsg); 
 }
 
-void receiveFileFromSocket(int clientSocket, int editMode, int encryptionKey) {
-    int bytesRead;
-    ServerMessage message;
-    char fileBuffer[MAX_BUFFER_SIZE] = {0};
+void receiveFileFromSocket(int sockfd, int editMode, int key) {
+    int bytesReceived;
+    ServerMessage newMsg;
+    char fileBuffer[BUFFER_SIZE] = {0}; // Initialize buffer
 
     while (1) {
-        bytesRead = recvMessage(clientSocket, &message);
-
-        if (bytesRead < 0 || message.length == 0) {
+        bytesReceived = recvMessage(sockfd, &newMsg);
+        if (bytesReceived < 0) {
             break;
         }
 
-        applyEditOperation(message.payload, editMode, encryptionKey);
-        strcat(fileBuffer, message.payload);
+        if (newMsg.length == 0) { // end of file
+            break;
+        }
+
+        edit(newMsg.payload, editMode, key);
+        strcat(fileBuffer, newMsg.payload);
     }
 
     save(fileBuffer);
 }
 
-void applyEditOperation(char* content, int editMode, int key) {
+void edit(char* content, int editMode, int key) {
     switch (editMode) {
         case 0:
             encrypt(content, key);
@@ -69,140 +95,120 @@ void applyEditOperation(char* content, int editMode, int key) {
             decrypt(content, key);
             break;
         default:
-            printf("ERROR: Invalid opcode!\n");
+            printf("ERROR: Invalid edit mode!\n");
             return;
     }
 }
 
-void handleMessage(int clientSocket, ServerMessage* receivedMessage) {
-    int encryptionKey = atoi(receivedMessage->payload);
-    int editMode = receivedMessage->opcode;
+void handleMessage(int sockfd, ServerMessage* msg, const char* filename) {
+    int key = atoi(msg->payload);
+    int editMode = msg->opcode;
 
-    receiveFileFromSocket(clientSocket, editMode, encryptionKey);
-    sendLatestFileToSocket(clientSocket);
-    deleteFile(getLatestFileName());
+    receiveFileFromSocket(sockfd, editMode, key);
+
+    sendFileToSocket(sockfd, filename);
+
+    deleteFile(filename);
 }
 
-void runServer(int listeningSocket) {
-    int maxFileDescriptor, maxIndex, newClientSocket;
-    int clientSockets[FD_SETSIZE];
-    fd_set allSet, readSet;
+void run(int listeningSocket, const char* filename) {
+    int maxi, maxfd;
+    int client[FD_SETSIZE];
+    fd_set readfds, allset;
 
-    maxFileDescriptor = listeningSocket;
-    maxIndex = -1;
+    maxfd = listeningSocket;
+    maxi = -1;
 
     for (int i = 0; i < FD_SETSIZE; i++)
-        clientSockets[i] = -1;
+        client[i] = -1;
 
-    FD_ZERO(&allSet);
-    FD_SET(listeningSocket, &allSet);
+    FD_ZERO(&allset);
+    FD_SET(listeningSocket, &allset);
 
-    socklen_t clientAddressLength;
-    struct sockaddr_in clientAddress;
+    socklen_t clilen;
+    struct sockaddr_in cliaddr;
 
-    int nReady;
+    int connfd, sockfd;
+    int nready;
+
     while (1) {
-        readSet = allSet;
-
-        nReady = select(maxFileDescriptor + 1, &readSet, NULL, NULL, NULL);
-
-        if (nReady < 0) {
+        readfds = allset; /* structure assignment */
+        nready = select(maxfd + 1, &readfds, NULL, NULL, NULL);
+        
+        if (nready < 0) {
             perror("\nError: ");
             return;
         }
 
-        if (FD_ISSET(listeningSocket, &readSet)) {
-            clientAddressLength = sizeof(clientAddress);
-
-            if ((newClientSocket = accept(listeningSocket, (struct sockaddr*)&clientAddress, &clientAddressLength)) < 0) {
+        if (FD_ISSET(listeningSocket, &readfds)) { /* new client connection */
+            clilen = sizeof(cliaddr);
+            if ((connfd = accept(listeningSocket, (struct sockaddr*)&cliaddr, &clilen)) < 0) {
                 perror("\nError: ");
             } else {
-                handleNewConnection(newClientSocket, &allSet, clientSockets, &maxFileDescriptor, &maxIndex);
-
-                if (--nReady <= 0) {
-                    continue;  // No more readable descriptors
+                printf("You got a connection from %s\n", inet_ntoa(cliaddr.sin_addr));
+                int count;
+                for (count = 0; count < FD_SETSIZE; count++)
+                    if (client[count] < 0) {
+                        client[count] = connfd;
+                        break;
+                    }
+                if (count == FD_SETSIZE) {
+                    printf("\nToo many clients");
+                    close(connfd);
                 }
+
+                FD_SET(connfd, &allset);
+                if (connfd > maxfd) {
+                    maxfd = connfd;
+                }
+
+                if (count > maxi) {
+                    maxi = count;
+                }
+
+                if (--nready <= 0)
+                    continue; /* no more readable descriptors */
             }
         }
 
-        handleClientMessages(clientSockets, &readSet, &nReady);
-    }
-}
+        ServerMessage receivedMessage;
+        for (int i = 0; i <= maxi; i++) { /* check all clients for data */
+            if ((sockfd = client[i]) < 0) {
+                continue;
+            }
 
-void handleNewConnection(int newClientSocket, fd_set* allSet, int clientSockets[], int* maxFileDescriptor, int* maxIndex) {
-    printf("New connection from %s\n", getClientAddress(newClientSocket));  // Function not provided; replace with your implementation
-
-    int i;
-    for (i = 0; i < FD_SETSIZE; i++) {
-        if (clientSockets[i] < 0) {
-            clientSockets[i] = newClientSocket;
-            break;
-        }
-    }
-
-    if (i == FD_SETSIZE) {
-        printf("\nToo many clients");
-        close(newClientSocket);
-    }
-
-    FD_SET(newClientSocket, allSet);
-
-    if (newClientSocket > *maxFileDescriptor) {
-        *maxFileDescriptor = newClientSocket;
-    }
-
-    if (i > *maxIndex) {
-        *maxIndex = i;
-    }
-}
-
-void handleClientMessages(int clientSockets[], fd_set* readSet, int* nReady) {
-    ServerMessage receivedMessage;
-
-    for (int i = 0; i <= *maxIndex; i++) {
-        int clientSocket = clientSockets[i];
-
-        if (clientSocket < 0) {
-            continue;
-        }
-
-        if (FD_ISSET(clientSocket, readSet)) {
-            ssize_t bytesRead = recvMessage(clientSocket, &receivedMessage);
-
-            if (bytesRead <= 0) {
-                closeClientSocket(clientSocket, readSet, clientSockets);
-            } else {
-                handleMessage(clientSocket, &receivedMessage);
-
-                if (--(*nReady) <= 0) {
-                    break;  // No more readable descriptors
+            if (FD_ISSET(sockfd, &readfds)) {
+                ssize_t bytesReceived = recvMessage(sockfd, &receivedMessage);
+                if (bytesReceived <= 0) {
+                    FD_CLR(sockfd, &allset);
+                    close(sockfd);
+                    client[i] = -1;
+                } else {
+                    handleMessage(sockfd, &receivedMessage, filename);
                 }
+
+                if (--nready <= 0)
+                    break; /* no more readable descriptors */
             }
         }
     }
-}
-
-void closeClientSocket(int clientSocket, fd_set* allSet, int clientSockets[]) {
-    FD_CLR(clientSocket, allSet);
-    close(clientSocket);
-    clientSockets[i] = -1;
 }
 
 int initializeServer(int port) {
     int listeningSocket;
-    struct sockaddr_in serverAddress;
+    struct sockaddr_in server;
 
-    if ((listeningSocket = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
+    if ((listeningSocket = socket(AF_INET, SOCK_STREAM, 0)) == -1) { /* calls socket() */
         printf("socket() error\n");
         exit(1);
     }
 
-    memset(&serverAddress, 0, sizeof(serverAddress));
-    serverAddress.sin_family = AF_INET;
-    serverAddress.sin_port = htons(port);
-    serverAddress.sin_addr.s_addr = htonl(INADDR_ANY);
+    memset(&server, 0, sizeof(server));
+    server.sin_family = AF_INET;
+    server.sin_port = htons(port);
+    server.sin_addr.s_addr = htonl(INADDR_ANY); /* INADDR_ANY puts your IP address automatically */
 
-    if (bind(listeningSocket, (struct sockaddr*)&serverAddress, sizeof(serverAddress)) == -1) {
+    if (bind(listeningSocket, (struct sockaddr*)&server, sizeof(server)) == -1) {
         perror("\nError bind: ");
         close(listeningSocket);
         exit(1);
@@ -224,12 +230,12 @@ int main(int argc, char* argv[]) {
         exit(1);
     }
 
+    const char* filename = "output.txt"; // Change this to your desired filename
     int listeningSocket;
 
     listeningSocket = initializeServer(atoi(argv[1]));
 
-    runServer(listeningSocket);
-
+    run(listeningSocket, filename);
     close(listeningSocket);
 
     return 0;
