@@ -25,20 +25,18 @@ void clientEcho(int clientSock) {
 	printf("Options:\n0: Encode\n1: Decode\nChoose an option:");
 	scanf(" %d", &opcode);
 
-	printf("Key (int): ");
+	printf("Shifted key: ");
 	scanf(" %d", &key);
 
-	ServerMessage newMsg;
-	newMsg.opcode = opcode % 2;
-	sprintf(newMsg.payload, "%d", key);
-	newMsg.length = strlen(newMsg.payload) + 1;
+	ServerMessage new_message;
+	new_message.opcode = opcode % 2;
+	sprintf(new_message.payload, "%d", key);
+	new_message.length = strlen(new_message.payload) + 1;
 
-	sendMessage(clientSock, &newMsg); // Send message first
+	sendMessage(clientSock, &new_message); // Send message first
 
-	// Send file
 	sendFileToSocket(clientSock, filename);
 
-	// Delete temporary file
 	deleteFile(filename);
 
 	receiveFileFromSocket(clientSock, filename, -1, 0);
@@ -57,13 +55,12 @@ int sendMessage(int sockfd, ServerMessage *msg) {
 		perror("\nError: ");
 		return -1;
 	}
-
 	return bytesSent;
 }
 
 void receiveFileFromSocket(int sockfd, char *filename, int editMode, int key) {
 	int bytesReceived;
-	ServerMessage newMsg;
+	ServerMessage new_message;
 
 	FILE *recvFile = fopen(filename, "ab");
 	if (!recvFile) {
@@ -72,9 +69,8 @@ void receiveFileFromSocket(int sockfd, char *filename, int editMode, int key) {
 	}
 
 	while (1) {
-		bytesReceived = recvMessage(sockfd, &newMsg);
-		editFile(newMsg.payload, editMode, key);
-		fwrite(newMsg.payload, 1, newMsg.length, recvFile);
+		bytesReceived = recvMessage(sockfd, &new_message);
+		fwrite(new_message.payload, 1, new_message.length, recvFile);
 	}
 
 	fclose(recvFile);
@@ -88,41 +84,22 @@ void sendFileToSocket(int sockfd, char *filename) {
 		perror("\nFile Error: ");
 		exit(1);
 	}
+	int bytesRead;
+	ServerMessage new_message;
+	new_message.opcode = 2;	
 
-	// Starting
-	int bytesSent, bytesRead;
-
-	// Send actual file
-	ServerMessage newMsg;
-	newMsg.opcode = 2;	// Send, receive file
-
-	int totalBytesSent = 0;
 	FILE *sendFile = fopen(filename, "rb");
 
-	while ((bytesRead = fread(newMsg.payload, 1, BUFF_MAX, sendFile)) > 0) {
-		newMsg.length = bytesRead;
-		newMsg.payload[bytesRead] = '\0';
-
-		bytesSent = sendMsg(sockfd, &newMsg);
-		if (bytesSent < 0) {
-			// ERROR HERE
-			continue;
-		}
-
-		totalBytesSent += bytesSent;
+	while ((bytesRead = fread(new_message.payload, 1, BUFFER, sendFile)) > 0) {
+		new_message.length = bytesRead;
+		new_message.payload[bytesRead] = '\0';
 	}
 
 	fclose(sendFile);
 
-	newMsg.length = 0;
-	memset(newMsg.payload, 0, BUFF_MAX);
-	bytesSent = sendMsg(sockfd, &newMsg);	// Final message
-	if (bytesSent < 0) {
-		// ERROR HERE
-		// continue;
-	}
-
-	DEBUG_PRINTF("Total bytes: %d\n", totalBytesSent);
+	new_message.length = 0;
+	memset(new_message.payload, 0, BUFFER);
+	int bytesSent = sendMsg(sockfd, &new_message);
 }
 
 int initializeClient(int port, char *inputAddr) {
@@ -147,14 +124,6 @@ int initializeClient(int port, char *inputAddr) {
 	return clientSock;
 }
 
-void runClient(int clientSock) {
-	clientEcho(clientSock);
-}
-
-void cleanupClient(int clientSock) {
-	close(clientSock);
-}
-
 int main(int argc, char *argv[]) {
 	if (argc != 3) {
 		printf("Usage: %s IPAddress PortNumber\n", argv[0]);
@@ -165,8 +134,8 @@ int main(int argc, char *argv[]) {
 
 	clientSock = initializeClient(atoi(argv[2]), argv[1]);
 
-	runClient(clientSock);
-	cleanupClient(clientSock);
+	clientEcho(clientSock);
+	close(clientSock);
 
 	return 0;
 }
