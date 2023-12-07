@@ -34,6 +34,3 @@ int sendMessage(int sockfd, ServerMessage * msg) {
 	return bytes_sent;
 }
 
-void printMsg(ServerMessage * msg) {
-	PRINTF("%d:%d:%s\n", msg->opcode, msg->length, msg->payload);
-}
