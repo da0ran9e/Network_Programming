@@ -19,10 +19,10 @@ void clientEcho(int clientSock) {
 
 	printf("File name: ");
 	fgets(filename, 200, stdin);
-	filename[strcspn(filename, "\r\n")] = 0;  // Remove all \r\n
+	filename[strcspn(filename, "\r\n")] = 0;  
 
 	int opcode, key;
-	printf("Send mode (0: Encode, 1: Decode): ");
+	printf("Options:\n0: Encode\n1: Decode\nChoose an option:");
 	scanf(" %d", &opcode);
 
 	printf("Key (int): ");
