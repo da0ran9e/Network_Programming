@@ -21,6 +21,7 @@ typedef struct ServerMessage {
     }
 
 int recvMessage(int sockfd, ServerMessage * msg);
+int sendMessage(int sockfd, ServerMessage * msg);
 void printMsg(ServerMessage * msg);
 
 #endif
