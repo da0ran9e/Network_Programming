@@ -86,7 +86,7 @@ void receiveFileFromSocket(int sockfd, int editMode, int key) {
     save(fileBuffer);
 }
 
-void edit(char* content, int editMode, int key) {
+void editFile(char* content, int editMode, int key) {
     switch (editMode) {
         case 0:
             encrypt(content, key);
