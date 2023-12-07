@@ -14,12 +14,12 @@
 #define BACKLOG 20
 #define MAX_BUFFER_SIZE 5120
 
-void client_echo(int client_sock) {
+void clientEcho(int clientSock) {
 	char filename[200];
 
-	printf("file name: ");
+	printf("File name: ");
 	fgets(filename, 200, stdin);
-	filename[strcspn(filename, "\r\n")] = 0;		// Remove all \r\n
+	filename[strcspn(filename, "\r\n")] = 0;  // Remove all \r\n
 
 	int opcode, key;
 	printf("Send mode (0: Encode, 1: Decode): ");
@@ -27,148 +27,146 @@ void client_echo(int client_sock) {
 
 	printf("Key (int): ");
 	scanf(" %d", &key);
-	
+
 	ServerMessage newMsg;
 	newMsg.opcode = opcode % 2;
 	sprintf(newMsg.payload, "%d", key);
 	newMsg.length = strlen(newMsg.payload) + 1;
 
-	sendMessage(client_sock, &newMsg); // Send msg first
+	sendMessage(clientSock, &newMsg); // Send message first
 
 	// Send file
-	send_file_to_socket(client_sock, filename);
+	sendFileToSocket(clientSock, filename);
 
 	// Delete temporary file
-	delete_file(filename);
+	deleteFile(filename);
 
-	recv_file_from_socket(client_sock, filename, -1, 0);
+	receiveFileFromSocket(clientSock, filename, -1, 0);
 	printf("Received file '%s'\n", filename);
 }
 
-int sendMessage(int sockfd, ServerMessage * msg) {
+int sendMessage(int sockfd, ServerMessage *msg) {
 	memset(buffer, 0, sizeof(buffer));
 
-    memcpy(buffer, &msg.opcode, 1); 
-    memcpy(buffer + 1, &msg.length, 2); 
-    memcpy(buffer + 3, msg.payload, BUFFER - 3);
+	memcpy(buffer, &msg->opcode, 1);
+	memcpy(buffer + 1, &msg->length, 2);
+	memcpy(buffer + 3, msg->payload, BUFFER - 3);
 
-	int bytes_sent = send(sockfd, buffer, msg->length + EXTRA_SIZE, 0);
-	if(bytes_sent < 0) {
+	int bytesSent = send(sockfd, buffer, msg->length + EXTRA_SIZE, 0);
+	if (bytesSent < 0) {
 		perror("\nError: ");
 		return -1;
 	}
 
-	return bytes_sent;
+	return bytesSent;
 }
 
-void recv_file_from_socket(int sockfd, char * filename, int editmode, int key) {
-	int bytes_received;
+void receiveFileFromSocket(int sockfd, char *filename, int editMode, int key) {
+	int bytesReceived;
 	ServerMessage newMsg;
 
-	FILE * recv_file = fopen(filename, "ab");
-	if (!recv_file) {
+	FILE *recvFile = fopen(filename, "ab");
+	if (!recvFile) {
 		perror("\nReceiving error: ");
 		return;
 	}
 
-
-	while(1) {
-		bytes_received = recvMessage(sockfd, &newMsg);
-		edit_file(newMsg.payload, editmode, key);
-		fwrite(newMsg.payload, 1, newMsg.length, recv_file);
+	while (1) {
+		bytesReceived = recvMessage(sockfd, &newMsg);
+		editFile(newMsg.payload, editMode, key);
+		fwrite(newMsg.payload, 1, newMsg.length, recvFile);
 	}
 
-	fclose(recv_file);
+	fclose(recvFile);
 }
 
-void send_file_to_socket(int sockfd, char * filename) {
-	struct stat filestats;
+void sendFileToSocket(int sockfd, char *filename) {
+	struct stat fileStats;
 
-	int status = stat(filename, &filestats);
+	int status = stat(filename, &fileStats);
 	if (status != 0) {
 		perror("\nFile Error: ");
 		exit(1);
 	}
 
-
 	// Starting
-	int bytes_sent, bytes_read;
+	int bytesSent, bytesRead;
 
 	// Send actual file
-	Msg newMsg;
-	newMsg.opcode = 2;	// Send, recv file
+	ServerMessage newMsg;
+	newMsg.opcode = 2;	// Send, receive file
 
-	int total_bytes_sent = 0;
-	FILE * send_file = fopen(filename, "rb");
+	int totalBytesSent = 0;
+	FILE *sendFile = fopen(filename, "rb");
 
-	while((bytes_read = fread(newMsg.payload, 1, BUFF_MAX, send_file)) > 0) {
-		newMsg.length = bytes_read;
-		newMsg.payload[bytes_read] = '\0';
+	while ((bytesRead = fread(newMsg.payload, 1, BUFF_MAX, sendFile)) > 0) {
+		newMsg.length = bytesRead;
+		newMsg.payload[bytesRead] = '\0';
 
-		bytes_sent = sendMsg(sockfd, &newMsg);
-		if (bytes_sent < 0) {
+		bytesSent = sendMsg(sockfd, &newMsg);
+		if (bytesSent < 0) {
 			// ERROR HERE
 			continue;
 		}
 
-		total_bytes_sent += bytes_sent;
+		totalBytesSent += bytesSent;
 	}
 
-	fclose(send_file);
+	fclose(sendFile);
 
 	newMsg.length = 0;
 	memset(newMsg.payload, 0, BUFF_MAX);
-	bytes_sent = sendMsg(sockfd, &newMsg);	// Final message
-	if (bytes_sent < 0) {
+	bytesSent = sendMsg(sockfd, &newMsg);	// Final message
+	if (bytesSent < 0) {
 		// ERROR HERE
 		// continue;
 	}
 
-	DEBUG_PRINTF("Total bytes: %d\n", total_bytes_sent);
+	DEBUG_PRINTF("Total bytes: %d\n", totalBytesSent);
 }
 
-int initialize_client(int port, char * inputAddr) {
-	int client_sock;
-	struct sockaddr_in server_addr; /* server's address information */
+int initializeClient(int port, char *inputAddr) {
+	int clientSock;
+	struct sockaddr_in serverAddr; /* server's address information */
 
-	//Step 1: Construct socket
-	client_sock = socket(AF_INET, SOCK_STREAM, 0);
-	
-	//Step 2: Specify server address
-	server_addr.sin_family = AF_INET;
-	server_addr.sin_port = htons(port);
-	server_addr.sin_addr.s_addr = inet_addr(inputAddr);
-	
-	//Step 3: Request to connect server
-	if(connect(client_sock, (struct sockaddr*)&server_addr, sizeof(struct sockaddr)) < 0) {
-		printf("Error! Can not connect to sever! Client exit imediately!\n");
-		close(client_sock);
+	// Step 1: Construct socket
+	clientSock = socket(AF_INET, SOCK_STREAM, 0);
+
+	// Step 2: Specify server address
+	serverAddr.sin_family = AF_INET;
+	serverAddr.sin_port = htons(port);
+	serverAddr.sin_addr.s_addr = inet_addr(inputAddr);
+
+	// Step 3: Request to connect to server
+	if (connect(clientSock, (struct sockaddr *)&serverAddr, sizeof(struct sockaddr)) < 0) {
+		printf("Error! Cannot connect to server! Client exit immediately!\n");
+		close(clientSock);
 		exit(0);
 	}
 
-	return client_sock;
+	return clientSock;
 }
 
-void run_client(int client_sock) {
-	client_echo(client_sock);
+void runClient(int clientSock) {
+	clientEcho(clientSock);
 }
 
-void cleanup_client(int client_sock) {
-	close(client_sock);
+void cleanupClient(int clientSock) {
+	close(clientSock);
 }
 
-int main(int argc, char *argv[]){
+int main(int argc, char *argv[]) {
 	if (argc != 3) {
 		printf("Usage: %s IPAddress PortNumber\n", argv[0]);
 		exit(1);
 	}
 
-	int client_sock;
+	int clientSock;
 
-	client_sock = initialize_client(atoi(argv[2]), argv[1]);
+	clientSock = initializeClient(atoi(argv[2]), argv[1]);
 
-	run_client(client_sock);
-	cleanup_client(client_sock);
-	
+	runClient(clientSock);
+	cleanupClient(clientSock);
+
 	return 0;
 }
