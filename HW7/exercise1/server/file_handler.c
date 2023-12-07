@@ -1,11 +1,11 @@
 #include "include/caesar.h"
 #include "include/file_handler.h"
 
-void delete(char * file) {
+void deleteFile(char * file) {
 	remove(file);
 }
 
-void save(char *data) {
+void saveFile(char *data) {
     time_t currentTime;
     time(&currentTime);
     struct tm *localTime = localtime(&currentTime);
