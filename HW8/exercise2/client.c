@@ -6,14 +6,15 @@
 
 #define MAX_BUFF_SIZE 1024
 
-void sendToServer(int serverSocket, const char *data, size_t dataSize) {
-    ssize_t bytesSent = sendto(serverSocket, data, dataSize, 0, NULL, 0);
+void sendToServer(int serverSocket, const char *data, size_t dataSize, const struct sockaddr_in *serverAddr) {
+    ssize_t bytesSent = sendto(serverSocket, data, dataSize, 0, (const struct sockaddr *)serverAddr, sizeof(*serverAddr));
 
     if (bytesSent == -1) {
         perror("Error sending data to server");
         exit(EXIT_FAILURE);
     }
 }
+
 
 void receiveResults(int serverSocket) {
     char buffer[MAX_BUFF_SIZE];
@@ -58,27 +59,29 @@ int main(int argc, char *argv[]) {
     char userInput[MAX_BUFF_SIZE];
 
     // Get user input and send to server until a blank string is entered
-    while (1) {
-        printf("Enter a string (blank to exit): ");
-        fgets(userInput, sizeof(userInput), stdin);
+    // Get user input and send to server until a blank string is entered
+while (1) {
+    printf("Enter a string (blank to exit): ");
+    fgets(userInput, sizeof(userInput), stdin);
 
-        // Remove newline character from the input
-        size_t len = strlen(userInput);
-        if (len > 0 && userInput[len - 1] == '\n') {
-            userInput[len - 1] = '\0';
-        }
-
-        // Break the loop if the user enters a blank string
-        if (strlen(userInput) == 0) {
-            break;
-        }
-
-        // Send user input to the server
-        sendToServer(clientSocket, userInput, strlen(userInput));
-
-        // Receive and print results from the server
-        receiveResults(clientSocket);
+    // Remove newline character from the input
+    size_t len = strlen(userInput);
+    if (len > 0 && userInput[len - 1] == '\n') {
+        userInput[len - 1] = '\0';
     }
+
+    // Break the loop if the user enters a blank string
+    if (strlen(userInput) == 0) {
+        break;
+    }
+
+    // Send user input to the server
+    sendToServer(clientSocket, userInput, strlen(userInput), &serverAddr);
+
+    // Receive and print results from the server
+    receiveResults(clientSocket);
+}
+
 
     // Close the client socket
     close(clientSocket);
