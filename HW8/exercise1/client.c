@@ -3,33 +3,33 @@
 #include <string.h>
 #include <unistd.h>
 #include <arpa/inet.h>
-#include <sys/socket.h>
 
 #define BUFFER_SIZE 1024
 
-void sendString(int socket, const char *str) {
-    send(socket, str, strlen(str), 0);
+void sendToServer(int serverSocket, const char *data) {
+    ssize_t bytesSent = send(serverSocket, data, strlen(data), 0);
+
+    if (bytesSent == -1) {
+        perror("Error sending data to server");
+        exit(EXIT_FAILURE);
+    }
 }
 
-void receiveResults(int socket) {
+void receiveResults(int serverSocket) {
     char buffer[BUFFER_SIZE];
-    ssize_t bytesRead;
 
-    // Receive results using readv for simultaneous reception
-    struct iovec iov[3];
-    iov[0].iov_base = buffer;
-    iov[0].iov_len = sizeof(buffer);
-
-    bytesRead = readv(socket, iov, 1);
+    // Receive results from the server
+    ssize_t bytesRead = recv(serverSocket, buffer, sizeof(buffer), 0);
 
     if (bytesRead <= 0) {
-        perror("Error receiving results");
-        close(socket);
+        perror("Error receiving results from server");
         exit(EXIT_FAILURE);
     }
 
-    buffer[bytesRead] = '\0';
-    printf("%s", buffer);
+    buffer[bytesRead] = '\0';  // Null-terminate the received data
+
+    // Print the received results
+    printf("%s\n", buffer);
 }
 
 int main(int argc, char *argv[]) {
@@ -38,8 +38,6 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    char *serverIP = argv[1];
-    int port = atoi(argv[2]);
     int clientSocket;
     struct sockaddr_in serverAddr;
 
@@ -52,31 +50,40 @@ int main(int argc, char *argv[]) {
     // Set up server address struct
     memset(&serverAddr, 0, sizeof(serverAddr));
     serverAddr.sin_family = AF_INET;
-    serverAddr.sin_addr.s_addr = inet_addr(serverIP);
-    serverAddr.sin_port = htons(port);
+    serverAddr.sin_addr.s_addr = inet_addr(argv[1]);
+    serverAddr.sin_port = htons(atoi(argv[2]));
 
     // Connect to the server
-    if (connect(clientSocket, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) == -1) {
+    if (connect(clientSocket, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) == -1) {
         perror("Connection failed");
         close(clientSocket);
         exit(EXIT_FAILURE);
     }
 
-    char inputString[BUFFER_SIZE];
+    char userInput[BUFFER_SIZE];
 
-    do {
-        // Get user input
-        printf("Enter a string (or type a blank string to exit): ");
-        fgets(inputString, sizeof(inputString), stdin);
+    // Get user input and send to server until a blank string is entered
+    while (1) {
+        printf("Enter a string (blank to exit): ");
+        fgets(userInput, sizeof(userInput), stdin);
 
-        // Send the input string to the server
-        sendString(clientSocket, inputString);
-
-        if (strlen(inputString) > 1) {
-            // Receive and print the results from the server
-            receiveResults(clientSocket);
+        // Remove newline character from the input
+        size_t len = strlen(userInput);
+        if (len > 0 && userInput[len - 1] == '\n') {
+            userInput[len - 1] = '\0';
         }
-    } while (strlen(inputString) > 1);
+
+        // Break the loop if the user enters a blank string
+        if (strlen(userInput) == 0) {
+            break;
+        }
+
+        // Send user input to the server
+        sendToServer(clientSocket, userInput);
+
+        // Receive and print results from the server
+        receiveResults(clientSocket);
+    }
 
     // Close the client socket
     close(clientSocket);
