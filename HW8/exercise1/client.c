@@ -12,84 +12,86 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    const char *serverIP = argv[1];
-    int port = atoi(argv[2]);
-    if (port <= 0 || port > 65535) {
-        fprintf(stderr, "Invalid port number\n");
-        exit(EXIT_FAILURE);
-    }
+    int clientSocket;
+    struct sockaddr_in serverAddr;
 
     // Create socket
-    int clientSocket = socket(AF_INET, SOCK_STREAM, 0);
-    if (clientSocket == -1) {
+    if ((clientSocket = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
         perror("Socket creation failed");
         exit(EXIT_FAILURE);
     }
 
     // Set up server address struct
-    struct sockaddr_in serverAddr;
     memset(&serverAddr, 0, sizeof(serverAddr));
     serverAddr.sin_family = AF_INET;
-    serverAddr.sin_addr.s_addr = inet_addr(serverIP);
-    serverAddr.sin_port = htons(port);
+    serverAddr.sin_addr.s_addr = inet_addr(argv[1]); // Server IP address
+    serverAddr.sin_port = htons(atoi(argv[2]));
 
     // Connect to the server
-    if (connect(clientSocket, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) == -1) {
+    if (connect(clientSocket, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) == -1) {
         perror("Connection failed");
         close(clientSocket);
         exit(EXIT_FAILURE);
     }
 
-    char inputBuffer[MAX_BUFFER_SIZE];
-    char outputBuffer[MAX_BUFFER_SIZE];
-
     while (1) {
         // Get user input
-        printf("Enter a string (blank to exit): ");
+        printf("Enter a string (or press Enter to exit): ");
+        char inputBuffer[MAX_BUFFER_SIZE];
         fgets(inputBuffer, sizeof(inputBuffer), stdin);
 
-        // Remove the newline character from the input
-        inputBuffer[strcspn(inputBuffer, "\n")] = '\0';
+        // Remove newline character from input
+        size_t inputLength = strlen(inputBuffer);
+        if (inputBuffer[inputLength - 1] == '\n') {
+            inputBuffer[inputLength - 1] = '\0';
+        }
 
-        // Send the input string to the server
-        send(clientSocket, inputBuffer, strlen(inputBuffer), 0);
-
-        // Break the loop on a blank string
-        if (strcmp(inputBuffer, "") == 0) {
+        // Break the loop if the user enters a blank string
+        if (inputLength == 1 && inputBuffer[0] == '\0') {
             break;
         }
 
-        // Receive the results from the server
-        ssize_t bytesRead = recv(clientSocket, outputBuffer, sizeof(outputBuffer), 0);
+        // Send the input string to the server
+        ssize_t bytesSent = send(clientSocket, inputBuffer, strlen(inputBuffer), 0);
 
-        if (bytesRead <= 0) {
-            break; // Connection closed or error
+        if (bytesSent == -1) {
+            perror("Error sending data");
+            close(clientSocket);
+            exit(EXIT_FAILURE);
         }
 
-        outputBuffer[bytesRead] = '\0';
+        // Receive results from the server
+        char resultAlpha[MAX_BUFFER_SIZE];
+        char resultDigit[MAX_BUFFER_SIZE];
+        int undefinedCount;
+
+        struct iovec iov[3];
+        iov[0].iov_base = resultAlpha;
+        iov[0].iov_len = sizeof(resultAlpha);
+        iov[1].iov_base = resultDigit;
+        iov[1].iov_len = sizeof(resultDigit);
+        iov[2].iov_base = &undefinedCount;
+        iov[2].iov_len = sizeof(int);
+
+        ssize_t bytesRead = readv(clientSocket, iov, 3);
+
+        if (bytesRead == -1) {
+            perror("Error receiving results");
+            close(clientSocket);
+            exit(EXIT_FAILURE);
+        }
+
+        // Null-terminate the received data
+        resultAlpha[iov[0].iov_len] = '\0';
+        resultDigit[iov[1].iov_len] = '\0';
 
         // Print the results
-        printf("Alphabetic characters: %s\n", outputBuffer);
+        printf("Result (Alphabets): %s\n", resultAlpha);
+        printf("Result (Digits): %s\n", resultDigit);
 
-        bytesRead = recv(clientSocket, outputBuffer, sizeof(outputBuffer), 0);
-
-        if (bytesRead <= 0) {
-            break; // Connection closed or error
+        if (undefinedCount > 0) {
+            printf("Total undefined characters: %d\n", undefinedCount);
         }
-
-        outputBuffer[bytesRead] = '\0';
-
-        printf("Numeric characters: %s\n", outputBuffer);
-
-        bytesRead = recv(clientSocket, outputBuffer, sizeof(outputBuffer), 0);
-
-        if (bytesRead <= 0) {
-            break; // Connection closed or error
-        }
-
-        outputBuffer[bytesRead] = '\0';
-
-        printf("Undefined character count: %s\n", outputBuffer);
     }
 
     // Close the client socket
