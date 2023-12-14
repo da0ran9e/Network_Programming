@@ -19,7 +19,7 @@ void receiveResults(int serverSocket, struct sockaddr_in * serverAddr) {
     char buffer[BUFFER_SIZE];
 
     // Receive results from the server
-    ssize_t bytesRead = recv(serverSocket, buffer, sizeof(buffer), 0, serverAddr, sizeof(struct sockaddr));
+    ssize_t bytesRead = recvfrom(serverSocket, buffer, sizeof(buffer), 0, serverAddr, sizeof(struct sockaddr));
 
     if (bytesRead <= 0) {
         perror("Error receiving results from server");
@@ -75,7 +75,7 @@ int main(int argc, char *argv[]) {
         sendToServer(clientSocket, userInput, serverAddr);
 
         // Receive and print results from the server
-        receiveResults(clientSocket);
+        receiveResults(clientSocket, serverAddr);
     }
 
     // Close the client socket
