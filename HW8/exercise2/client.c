@@ -2,26 +2,15 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <netdb.h>
-#include <signal.h>
 #include <arpa/inet.h>
 
-#define BUFFER_SIZE 1024
+#define MAX_BUFF_SIZE 1024
 
-void sendToServer(int serverSocket, const char *data, struct sockaddr_in * serverAddr) {
-    ssize_t bytesSent = sendto(serverSocket, data, strlen(data), 0, (struct sockaddr *)serverAddr, sizeof(struct sockaddr));
-
-    if (bytesSent == -1) {
-        perror("Error sending data to server");
-        exit(EXIT_FAILURE);
-    }
-}
-
-void receiveResults(int serverSocket, struct sockaddr_in * serverAddr) {
-    char buffer[BUFFER_SIZE];
+void receiveResults(int sockfd) {
+    char buffer[MAX_BUFF_SIZE];
 
     // Receive results from the server
-    ssize_t bytesRead = recvfrom(serverSocket, buffer, sizeof(buffer), 0, (struct sockaddr *)serverAddr, sizeof(struct sockaddr));
+    ssize_t bytesRead = recvfrom(sockfd, buffer, sizeof(buffer), 0, NULL, NULL);
 
     if (bytesRead <= 0) {
         perror("Error receiving results from server");
@@ -31,20 +20,20 @@ void receiveResults(int serverSocket, struct sockaddr_in * serverAddr) {
     buffer[bytesRead] = '\0';  // Null-terminate the received data
 
     // Print the received results
-    printf("%s", buffer);
+    printf("%s\n", buffer);
 }
 
 int main(int argc, char *argv[]) {
     if (argc != 3) {
-        fprintf(stderr, "Usage: %s IP_Addr Port_Number\n", argv[0]);
+        fprintf(stderr, "Usage: %s IPAddress PortNumber\n", argv[0]);
         exit(EXIT_FAILURE);
     }
 
-    int clientSocket;
+    int sockfd;
     struct sockaddr_in serverAddr;
 
     // Create socket
-    if ((clientSocket = socket(AF_INET, SOCK_DGRAM, 0)) == -1) {
+    if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) == -1) {
         perror("Socket creation failed");
         exit(EXIT_FAILURE);
     }
@@ -55,7 +44,7 @@ int main(int argc, char *argv[]) {
     serverAddr.sin_addr.s_addr = inet_addr(argv[1]);
     serverAddr.sin_port = htons(atoi(argv[2]));
 
-    char userInput[BUFFER_SIZE];
+    char userInput[MAX_BUFF_SIZE];
 
     // Get user input and send to server until a blank string is entered
     while (1) {
@@ -74,14 +63,15 @@ int main(int argc, char *argv[]) {
         }
 
         // Send user input to the server
-        sendToServer(clientSocket, userInput, &serverAddr);
+        sendto(sockfd, userInput, strlen(userInput), 0,
+               (struct sockaddr*)&serverAddr, sizeof(serverAddr));
 
         // Receive and print results from the server
-        receiveResults(clientSocket, &serverAddr);
+        receiveResults(sockfd);
     }
 
-    // Close the client socket
-    close(clientSocket);
+    // Close the socket
+    close(sockfd);
 
     return 0;
 }
