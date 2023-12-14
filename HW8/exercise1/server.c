@@ -3,19 +3,42 @@
 #include <string.h>
 #include <unistd.h>
 #include <arpa/inet.h>
-#include <ctype.h>
 
-#define MAX_BUFFER_SIZE 1024
+#define BUFFER_SIZE 1024
 
-int main(int argc, char *argv[]) {
+void processString(const char* input, char* alphabet, char* digits, int* undefinedCount) {
+    int alphIndex = 0;
+    int digitIndex = 0;
+    *undefinedCount = 0;
+
+    for (int i = 0; input[i] != '\0'; i++) {
+        if (isalpha(input[i])) {
+            alphabet[alphIndex++] = input[i];
+        } else if (isdigit(input[i])) {
+            digits[digitIndex++] = input[i];
+        } else {
+            (*undefinedCount)++;
+        }
+    }
+
+    alphabet[alphIndex] = '\0';
+    digits[digitIndex] = '\0';
+}
+
+int main(int argc, char* argv[]) {
     if (argc != 2) {
-        fprintf(stderr, "Usage: %s Port_Number\n", argv[0]);
+        printf("Usage: %s Port_Number\n", argv[0]);
         exit(EXIT_FAILURE);
     }
 
     int serverSocket, clientSocket;
     struct sockaddr_in serverAddr, clientAddr;
     socklen_t addrLen = sizeof(clientAddr);
+    char buffer[BUFFER_SIZE];
+    char alphabet[BUFFER_SIZE];
+    char digits[BUFFER_SIZE];
+
+    int port = atoi(argv[1]);
 
     // Create socket
     if ((serverSocket = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
@@ -27,7 +50,7 @@ int main(int argc, char *argv[]) {
     memset(&serverAddr, 0, sizeof(serverAddr));
     serverAddr.sin_family = AF_INET;
     serverAddr.sin_addr.s_addr = INADDR_ANY;
-    serverAddr.sin_port = htons(atoi(argv[1]));
+    serverAddr.sin_port = htons(port);
 
     // Bind the socket to the specified port
     if (bind(serverSocket, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) == -1) {
@@ -43,58 +66,54 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    printf("Server listening on port %d...\n", atoi(argv[1]));
+    printf("Server listening on port %d...\n", port);
 
+    // Accept incoming connections and process client requests
     while (1) {
-        // Accept a connection
-        if ((clientSocket = accept(serverSocket, (struct sockaddr*)&clientAddr, &addrLen)) == -1) {
+        clientSocket = accept(serverSocket, (struct sockaddr*)&clientAddr, &addrLen);
+
+        if (clientSocket == -1) {
             perror("Accept failed");
             continue;
         }
 
         printf("Connection accepted from %s:%d\n", inet_ntoa(clientAddr.sin_addr), ntohs(clientAddr.sin_port));
 
-        // Receive the string from the client
-        char buffer[MAX_BUFFER_SIZE];
-        ssize_t bytesRead = recv(clientSocket, buffer, sizeof(buffer), 0);
+        // Set client socket to non-blocking mode
+        fcntl(clientSocket, F_SETFL, O_NONBLOCK);
 
-        if (bytesRead <= 0) {
-            perror("Error receiving data");
+        int bytesRead = 0;
+        int totalBytesRead = 0;
+
+        while ((bytesRead = read(clientSocket, buffer + totalBytesRead, sizeof(buffer) - totalBytesRead)) > 0) {
+            totalBytesRead += bytesRead;
+        }
+
+        if (bytesRead == 0) {
+            // Client disconnected
+            printf("Client disconnected\n");
+            close(clientSocket);
+            continue;
+        } else if (bytesRead == -1 && errno != EWOULDBLOCK) {
+            perror("Error reading from client");
             close(clientSocket);
             continue;
         }
 
+        // Null-terminate the received data
+        buffer[totalBytesRead] = '\0';
+
         // Process the received string
-        buffer[bytesRead] = '\0';
+        int undefinedCount;
+        processString(buffer, alphabet, digits, &undefinedCount);
 
-        char resultAlpha[MAX_BUFFER_SIZE] = "";
-        char resultDigit[MAX_BUFFER_SIZE] = "";
-        int undefinedCount = 0;
+        // Send results back to the client
+        char resultBuffer[BUFFER_SIZE];
+        snprintf(resultBuffer, sizeof(resultBuffer), "Alphabets: %s\nDigits: %s\nUndefined characters count: %d\n",
+                 alphabet, digits, undefinedCount);
 
-        for (size_t i = 0; i < bytesRead; i++) {
-            if (isalpha(buffer[i])) {
-                strncat(resultAlpha, &buffer[i], 1);
-            } else if (isdigit(buffer[i])) {
-                strncat(resultDigit, &buffer[i], 1);
-            } else {
-                undefinedCount++;
-            }
-        }
-
-        // Send the results back to the client
-        struct iovec iov[3];
-        iov[0].iov_base = resultAlpha;
-        iov[0].iov_len = strlen(resultAlpha);
-        iov[1].iov_base = resultDigit;
-        iov[1].iov_len = strlen(resultDigit);
-        iov[2].iov_base = &undefinedCount;
-        iov[2].iov_len = sizeof(int);
-
-        ssize_t bytesSent = writev(clientSocket, iov, 3);
-
-        if (bytesSent == -1) {
-            perror("Error sending results");
-        }
+        // Write the results back to the client
+        write(clientSocket, resultBuffer, strlen(resultBuffer));
 
         // Close the client socket
         close(clientSocket);
