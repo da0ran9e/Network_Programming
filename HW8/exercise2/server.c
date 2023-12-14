@@ -3,52 +3,65 @@
 #include <string.h>
 #include <unistd.h>
 #include <arpa/inet.h>
-#include <signal.h>
+#include <netdb.h>
 #include <fcntl.h>
+#include <signal.h>
 #include <sys/ioctl.h>
 
 #define MAX_BUFF_SIZE 1024
-#define QSIZE 10
-
-struct Datagram {
-    void *dg_sa;
-    socklen_t dg_salen;
-    char dg_data[MAX_BUFF_SIZE];
-};
-
-static struct Datagram dg[QSIZE];
-static int iget, iput, nqueue;
-
-void resolve(FILE *out_stream, const char *input) {
-    // Your implementation to resolve IP addresses or domain names
-    // and write the result to the out_stream
-}
 
 void sig_io(int signo) {
-    struct sockaddr_in cliaddr;
-    socklen_t clilen = sizeof(cliaddr);
     int n;
+    struct sockaddr_in clientAddr;
+    socklen_t addrLen = sizeof(clientAddr);
+    char buffer[MAX_BUFF_SIZE];
 
-    dg[iput].dg_salen = clilen;
-    n = recvfrom(STDIN_FILENO, dg[iput].dg_data, MAX_BUFF_SIZE, 0,
-                 (struct sockaddr *)&cliaddr, &dg[iput].dg_salen);
+    n = recvfrom(serverSocket, buffer, sizeof(buffer), 0, (struct sockaddr*)&clientAddr, &addrLen);
 
     if (n < 0) {
-        perror("recvfrom error");
-        exit(EXIT_FAILURE);
+        perror("Error receiving data");
+        return;
     }
 
-    dg[iput].dg_sa = malloc(clilen);
-    memcpy(dg[iput].dg_sa, &cliaddr, clilen);
-    if (++iput >= QSIZE)
-        iput = 0;
+    buffer[n] = '\0';
 
-    if (iput == iget) {
-        fprintf(stderr, "receive buffer overflow\n");
-        exit(EXIT_FAILURE);
+    // Process the received domain name or IP address
+    // Here, we use getaddrinfo to obtain information about the input
+    struct addrinfo hints, *res;
+    int status;
+    char result[MAX_BUFF_SIZE];
+
+    memset(&hints, 0, sizeof hints);
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_DGRAM;
+
+    status = getaddrinfo(buffer, NULL, &hints, &res);
+
+    if (status != 0) {
+        snprintf(result, sizeof(result), "Not found information\n");
+    } else {
+        struct addrinfo* p;
+        for (p = res; p != NULL; p = p->ai_next) {
+            void* addr;
+            char ip[INET6_ADDRSTRLEN];
+
+            if (p->ai_family == AF_INET) {
+                struct sockaddr_in* ipv4 = (struct sockaddr_in*)p->ai_addr;
+                addr = &(ipv4->sin_addr);
+            } else {
+                struct sockaddr_in6* ipv6 = (struct sockaddr_in6*)p->ai_addr;
+                addr = &(ipv6->sin6_addr);
+            }
+
+            inet_ntop(p->ai_family, addr, ip, sizeof(ip));
+            snprintf(result + strlen(result), sizeof(result) - strlen(result), "%s\n", ip);
+        }
+
+        freeaddrinfo(res);
     }
 
-    nqueue++;
+    // Send the result back to the client
+    sendto(serverSocket, result, strlen(result), 0, (struct sockaddr*)&clientAddr, sizeof(clientAddr));
 }
 
 int main(int argc, char *argv[]) {
@@ -57,11 +70,12 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    int sockfd;
+    int serverSocket;
     struct sockaddr_in serverAddr;
+    struct sigaction sigAction;
 
     // Create socket
-    if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) == -1) {
+    if ((serverSocket = socket(AF_INET, SOCK_DGRAM, 0)) == -1) {
         perror("Socket creation failed");
         exit(EXIT_FAILURE);
     }
@@ -73,47 +87,38 @@ int main(int argc, char *argv[]) {
     serverAddr.sin_port = htons(atoi(argv[1]));
 
     // Bind the socket to the specified port
-    if (bind(sockfd, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) == -1) {
+    if (bind(serverSocket, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) == -1) {
         perror("Bind failed");
-        close(sockfd);
+        close(serverSocket);
         exit(EXIT_FAILURE);
     }
 
-    int on = 1;
-    sigset_t zeromask, newmask, oldmask;
-    
-    sigemptyset(&zeromask);
-    sigemptyset(&oldmask);
-    sigemptyset(&newmask);
-    sigaddset(&newmask, SIGIO);
+    // Signal handling setup
+    sigAction.sa_handler = sig_io;
+    sigemptyset(&sigAction.sa_mask);
+    sigAction.sa_flags = 0;
 
-    signal(SIGIO, sig_io);
-    fcntl(sockfd, F_SETOWN, getpid());
-    ioctl(sockfd, FIOASYNC, &on);
-    ioctl(sockfd, FIONBIO, &on);
-
-    sigprocmask(SIG_BLOCK, &newmask, &oldmask);
-
-    while (1) {
-        while (nqueue == 0)
-            sigsuspend(&zeromask);
-
-        sigprocmask(SIG_SETMASK, &oldmask, NULL);
-
-        char result[MAX_BUFF_SIZE];
-        FILE *out_stream = fmemopen(result, MAX_BUFF_SIZE - 1, "w");
-        resolve(out_stream, dg[iget].dg_data);
-        fclose(out_stream);
-
-        sendto(sockfd, result, MAX_BUFF_SIZE, 0,
-               dg[iget].dg_sa, dg[iget].dg_salen);
-
-        if (++iget >= QSIZE)
-            iget = 0;
-
-        sigprocmask(SIG_BLOCK, &newmask, &oldmask);
-        nqueue--;
+    if (sigaction(SIGIO, &sigAction, NULL) == -1) {
+        perror("Sigaction failed");
+        close(serverSocket);
+        exit(EXIT_FAILURE);
     }
+
+    // Set socket options for signal-driven I/O
+    int on = 1;
+    ioctl(serverSocket, FIOASYNC, &on);
+    fcntl(serverSocket, F_SETOWN, getpid());
+    ioctl(serverSocket, FIONBIO, &on);
+
+    printf("Server listening on port %d...\n", atoi(argv[1]));
+
+    // Keep the server running
+    while (1) {
+        sleep(1);  // Sleep to allow the signal-driven I/O to handle data
+    }
+
+    // Close the server socket
+    close(serverSocket);
 
     return 0;
 }
