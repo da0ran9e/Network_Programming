@@ -72,7 +72,7 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    printf("Server listening on port %d...\n", atoi(argv[1]));
+    printf("Server listening on port %d...\n", atoi(argv[0]));
 
     // Register signal handler
     signal(SIGINT, handleSignal);
