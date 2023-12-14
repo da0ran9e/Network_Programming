@@ -18,7 +18,6 @@ void sendToServer(int serverSocket, const char *data) {
 void receiveResults(int serverSocket) {
     char buffer[BUFFER_SIZE];
 
-    // Receive results from the server
     ssize_t bytesRead = recv(serverSocket, buffer, sizeof(buffer), 0);
 
     if (bytesRead <= 0) {
@@ -26,9 +25,8 @@ void receiveResults(int serverSocket) {
         exit(EXIT_FAILURE);
     }
 
-    buffer[bytesRead] = '\0';  // Null-terminate the received data
+    buffer[bytesRead] = '\0';
 
-    // Print the received results
     printf("%s\n", buffer);
 }
 
@@ -41,19 +39,16 @@ int main(int argc, char *argv[]) {
     int clientSocket;
     struct sockaddr_in serverAddr;
 
-    // Create socket
     if ((clientSocket = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
         perror("Socket creation failed");
         exit(EXIT_FAILURE);
     }
 
-    // Set up server address struct
     memset(&serverAddr, 0, sizeof(serverAddr));
     serverAddr.sin_family = AF_INET;
     serverAddr.sin_addr.s_addr = inet_addr(argv[1]);
     serverAddr.sin_port = htons(atoi(argv[2]));
 
-    // Connect to the server
     if (connect(clientSocket, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) == -1) {
         perror("Connection failed");
         close(clientSocket);
@@ -62,30 +57,24 @@ int main(int argc, char *argv[]) {
 
     char userInput[BUFFER_SIZE];
 
-    // Get user input and send to server until a blank string is entered
     while (1) {
         printf("Enter a string (blank to exit): ");
         fgets(userInput, sizeof(userInput), stdin);
 
-        // Remove newline character from the input
         size_t len = strlen(userInput);
         if (len > 0 && userInput[len - 1] == '\n') {
             userInput[len - 1] = '\0';
         }
 
-        // Break the loop if the user enters a blank string
         if (strlen(userInput) == 0) {
             break;
         }
 
-        // Send user input to the server
         sendToServer(clientSocket, userInput);
 
-        // Receive and print results from the server
         receiveResults(clientSocket);
     }
 
-    // Close the client socket
     close(clientSocket);
 
     return 0;
