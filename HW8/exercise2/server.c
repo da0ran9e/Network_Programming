@@ -10,7 +10,7 @@
 
 #define MAX_BUFF_SIZE 1024
 
-void sig_io(int signo) {
+void sig_io(int serverSocket) {
     int n;
     struct sockaddr_in clientAddr;
     socklen_t addrLen = sizeof(clientAddr);
