@@ -12,7 +12,6 @@ void processClientData(int clientSocket) {
     char alphabetString[BUFFER_SIZE];
     char digitString[BUFFER_SIZE];
 
-    // Read data from the client
     ssize_t bytesRead = recv(clientSocket, buffer, sizeof(buffer), 0);
 
     if (bytesRead <= 0) {
@@ -20,7 +19,7 @@ void processClientData(int clientSocket) {
         return;
     }
 
-    buffer[bytesRead] = '\0';  // Null-terminate the received data
+    buffer[bytesRead] = '\0'; 
 
     // Process the received string
     int alphabetIndex = 0;
@@ -37,10 +36,9 @@ void processClientData(int clientSocket) {
         }
     }
 
-    alphabetString[alphabetIndex] = '\0';  // Null-terminate the alphabet string
-    digitString[digitIndex] = '\0';        // Null-terminate the digit string
+    alphabetString[alphabetIndex] = '\0';  
+    digitString[digitIndex] = '\0';    
 
-    // Send the processed strings and the count of undefined characters back to the client
     send(clientSocket, alphabetString, strlen(alphabetString), 0);
     send(clientSocket, digitString, strlen(digitString), 0);
 
@@ -61,26 +59,23 @@ int main(int argc, char *argv[]) {
     struct sockaddr_in serverAddr, clientAddr;
     socklen_t addrLen = sizeof(clientAddr);
 
-    // Create socket
+
     if ((serverSocket = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
         perror("Socket creation failed");
         exit(EXIT_FAILURE);
     }
 
-    // Set up server address struct
     memset(&serverAddr, 0, sizeof(serverAddr));
     serverAddr.sin_family = AF_INET;
     serverAddr.sin_addr.s_addr = INADDR_ANY;
     serverAddr.sin_port = htons(atoi(argv[1]));
 
-    // Bind the socket to the specified port
     if (bind(serverSocket, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) == -1) {
         perror("Bind failed");
         close(serverSocket);
         exit(EXIT_FAILURE);
     }
 
-    // Listen for incoming connections
     if (listen(serverSocket, 5) == -1) {
         perror("Listen failed");
         close(serverSocket);
@@ -89,7 +84,6 @@ int main(int argc, char *argv[]) {
 
     printf("Server listening on port %d...\n", atoi(argv[1]));
 
-    // Accept incoming connections and process client data
     while (1) {
         // Use select to check if the socket is ready for reading
         fd_set readfds;
@@ -110,15 +104,12 @@ int main(int argc, char *argv[]) {
 
             printf("Connection accepted from %s:%d\n", inet_ntoa(clientAddr.sin_addr), ntohs(clientAddr.sin_port));
 
-            // Process client data
             processClientData(clientSocket);
 
-            // Close the client socket
             close(clientSocket);
         }
     }
 
-    // Close the server socket
     close(serverSocket);
 
     return 0;
