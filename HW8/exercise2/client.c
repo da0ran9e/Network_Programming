@@ -3,17 +3,11 @@
 #include <string.h>
 #include <unistd.h>
 #include <arpa/inet.h>
-#include <signal.h>
 
 #define BUFFER_SIZE 1024
 
-void handleSignal(int signal) {
-    printf("Received signal %d. Exiting.\n", signal);
-    exit(EXIT_SUCCESS);
-}
-
-void sendToServer(int serverSocket, const char *data, const struct sockaddr_in *serverAddr, socklen_t addrLen) {
-    ssize_t bytesSent = sendto(serverSocket, data, strlen(data), 0, (const struct sockaddr*)serverAddr, addrLen);
+void sendToServer(int serverSocket, const char *data) {
+    ssize_t bytesSent = send(serverSocket, data, strlen(data), 0);
 
     if (bytesSent == -1) {
         perror("Error sending data to server");
@@ -25,7 +19,7 @@ void receiveResults(int serverSocket) {
     char buffer[BUFFER_SIZE];
 
     // Receive results from the server
-    ssize_t bytesRead = recvfrom(serverSocket, buffer, sizeof(buffer), 0, NULL, NULL);
+    ssize_t bytesRead = recv(serverSocket, buffer, sizeof(buffer), 0);
 
     if (bytesRead <= 0) {
         perror("Error receiving results from server");
@@ -35,12 +29,12 @@ void receiveResults(int serverSocket) {
     buffer[bytesRead] = '\0';  // Null-terminate the received data
 
     // Print the received results
-    printf("%s\n", buffer);
+    printf("%s", buffer);
 }
 
 int main(int argc, char *argv[]) {
     if (argc != 3) {
-        fprintf(stderr, "Usage: %s IPAddress Port_Number\n", argv[0]);
+        fprintf(stderr, "Usage: %s IP_Addr Port_Number\n", argv[0]);
         exit(EXIT_FAILURE);
     }
 
@@ -59,14 +53,11 @@ int main(int argc, char *argv[]) {
     serverAddr.sin_addr.s_addr = inet_addr(argv[1]);
     serverAddr.sin_port = htons(atoi(argv[2]));
 
-    // Register signal handler for termination
-    signal(SIGINT, handleSignal);
-
     char userInput[BUFFER_SIZE];
 
     // Get user input and send to server until a blank string is entered
     while (1) {
-        printf("Enter a string (blank to exit): ");
+        printf("Enter an IP address or domain name (blank to exit): ");
         fgets(userInput, sizeof(userInput), stdin);
 
         // Remove newline character from the input
@@ -81,7 +72,7 @@ int main(int argc, char *argv[]) {
         }
 
         // Send user input to the server
-        sendToServer(clientSocket, userInput, &serverAddr, sizeof(serverAddr));
+        sendToServer(clientSocket, userInput);
 
         // Receive and print results from the server
         receiveResults(clientSocket);
