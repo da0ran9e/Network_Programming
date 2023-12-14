@@ -21,7 +21,6 @@ void receiveResults(int serverSocket) {
     struct sockaddr_in serverAddr;
     socklen_t addrLen = sizeof(serverAddr);
 
-    // Receive results from the server
     ssize_t bytesRead = recvfrom(serverSocket, buffer, sizeof(buffer), 0, (struct sockaddr*)&serverAddr, &addrLen);
 
     if (bytesRead <= 0) {
@@ -29,9 +28,8 @@ void receiveResults(int serverSocket) {
         exit(EXIT_FAILURE);
     }
 
-    buffer[bytesRead] = '\0';  // Null-terminate the received data
+    buffer[bytesRead] = '\0';
 
-    // Print the received results
     printf("%s\n", buffer);
 }
 
@@ -44,13 +42,11 @@ int main(int argc, char *argv[]) {
     int clientSocket;
     struct sockaddr_in serverAddr;
 
-    // Create socket
     if ((clientSocket = socket(AF_INET, SOCK_DGRAM, 0)) == -1) {
         perror("Socket creation failed");
         exit(EXIT_FAILURE);
     }
 
-    // Set up server address struct
     memset(&serverAddr, 0, sizeof(serverAddr));
     serverAddr.sin_family = AF_INET;
     serverAddr.sin_addr.s_addr = inet_addr(argv[1]);
@@ -58,8 +54,7 @@ int main(int argc, char *argv[]) {
 
     char userInput[MAX_BUFF_SIZE];
 
-    // Get user input and send to server until a blank string is entered
-    // Get user input and send to server until a blank string is entered
+    // Get user input 
 while (1) {
     printf("Enter a string (blank to exit): ");
     fgets(userInput, sizeof(userInput), stdin);
@@ -70,20 +65,15 @@ while (1) {
         userInput[len - 1] = '\0';
     }
 
-    // Break the loop if the user enters a blank string
     if (strlen(userInput) == 0) {
         break;
     }
 
-    // Send user input to the server
     sendToServer(clientSocket, userInput, strlen(userInput), &serverAddr);
 
-    // Receive and print results from the server
     receiveResults(clientSocket);
 }
 
-
-    // Close the client socket
     close(clientSocket);
 
     return 0;
