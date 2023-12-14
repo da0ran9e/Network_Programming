@@ -74,10 +74,10 @@ int main(int argc, char *argv[]) {
         }
 
         // Send user input to the server
-        sendToServer(clientSocket, userInput, serverAddr);
+        sendToServer(clientSocket, userInput, &serverAddr);
 
         // Receive and print results from the server
-        receiveResults(clientSocket, serverAddr);
+        receiveResults(clientSocket, &serverAddr);
     }
 
     // Close the client socket
