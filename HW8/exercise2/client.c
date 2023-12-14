@@ -3,49 +3,47 @@
 #include <string.h>
 #include <unistd.h>
 #include <arpa/inet.h>
-#include <netdb.h>
+#include <signal.h>
 
 #define BUFFER_SIZE 1024
 
-void resolveAndPrint(char *input) {
-    struct hostent *host;
-    struct in_addr addr;
+void handleSignal(int signal) {
+    printf("Received signal %d. Exiting.\n", signal);
+    exit(EXIT_SUCCESS);
+}
 
-    // Try to resolve as IP address
-    if (inet_pton(AF_INET, input, &addr) > 0) {
-        host = gethostbyaddr(&addr, sizeof(addr), AF_INET);
-        if (host == NULL) {
-            printf("Official name: (null)\n");
-        } else {
-            printf("Official name: %s\n", host->h_name);
-        }
+void sendToServer(int serverSocket, const char *data, const struct sockaddr_in *serverAddr, socklen_t addrLen) {
+    ssize_t bytesSent = sendto(serverSocket, data, strlen(data), 0, (const struct sockaddr*)serverAddr, addrLen);
 
-        char **alias = host->h_aliases;
-        printf("Alias name:\n");
-        while (*alias != NULL) {
-            printf("%s\n", *alias);
-            alias++;
-        }
-    }
-    // Try to resolve as domain name
-    else {
-        host = gethostbyname(input);
-        if (host == NULL) {
-            printf("Not found information\n");
-        } else {
-            printf("Official IP: %s\n", inet_ntoa(*(struct in_addr*)host->h_addr_list[0]));
-
-            char **alias = host->h_addr_list + 1;
-            printf("Alias IP:\n");
-            while (*alias != NULL) {
-                printf("%s\n", inet_ntoa(*(struct in_addr*)*alias));
-                alias++;
-            }
-        }
+    if (bytesSent == -1) {
+        perror("Error sending data to server");
+        exit(EXIT_FAILURE);
     }
 }
 
-void initializeClient(const char *serverIP, int port) {
+void receiveResults(int serverSocket) {
+    char buffer[BUFFER_SIZE];
+
+    // Receive results from the server
+    ssize_t bytesRead = recvfrom(serverSocket, buffer, sizeof(buffer), 0, NULL, NULL);
+
+    if (bytesRead <= 0) {
+        perror("Error receiving results from server");
+        exit(EXIT_FAILURE);
+    }
+
+    buffer[bytesRead] = '\0';  // Null-terminate the received data
+
+    // Print the received results
+    printf("%s\n", buffer);
+}
+
+int main(int argc, char *argv[]) {
+    if (argc != 3) {
+        fprintf(stderr, "Usage: %s IPAddress Port_Number\n", argv[0]);
+        exit(EXIT_FAILURE);
+    }
+
     int clientSocket;
     struct sockaddr_in serverAddr;
 
@@ -58,8 +56,11 @@ void initializeClient(const char *serverIP, int port) {
     // Set up server address struct
     memset(&serverAddr, 0, sizeof(serverAddr));
     serverAddr.sin_family = AF_INET;
-    serverAddr.sin_addr.s_addr = inet_addr(serverIP);
-    serverAddr.sin_port = htons(port);
+    serverAddr.sin_addr.s_addr = inet_addr(argv[1]);
+    serverAddr.sin_port = htons(atoi(argv[2]));
+
+    // Register signal handler for termination
+    signal(SIGINT, handleSignal);
 
     char userInput[BUFFER_SIZE];
 
@@ -80,42 +81,14 @@ void initializeClient(const char *serverIP, int port) {
         }
 
         // Send user input to the server
-        if (sendto(clientSocket, userInput, strlen(userInput), 0, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) == -1) {
-            perror("Error sending data to server");
-            close(clientSocket);
-            exit(EXIT_FAILURE);
-        }
+        sendToServer(clientSocket, userInput, &serverAddr, sizeof(serverAddr));
 
-        // Receive results from the server
-        char buffer[BUFFER_SIZE];
-        ssize_t bytesRead = recv(clientSocket, buffer, sizeof(buffer), 0);
-
-        if (bytesRead <= 0) {
-            perror("Error receiving results from server");
-            close(clientSocket);
-            exit(EXIT_FAILURE);
-        }
-
-        buffer[bytesRead] = '\0';  // Null-terminate the received data
-
-        // Print the received results
-        printf("%s\n", buffer);
+        // Receive and print results from the server
+        receiveResults(clientSocket);
     }
 
     // Close the client socket
     close(clientSocket);
-}
-
-int main(int argc, char *argv[]) {
-    if (argc != 3) {
-        fprintf(stderr, "Usage: %s IPAddress Port_Number\n", argv[0]);
-        exit(EXIT_FAILURE);
-    }
-
-    const char *serverIP = argv[1];
-    int port = atoi(argv[2]);
-
-    initializeClient(serverIP, port);
 
     return 0;
 }
