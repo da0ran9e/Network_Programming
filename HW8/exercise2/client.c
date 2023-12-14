@@ -6,8 +6,8 @@
 
 #define BUFFER_SIZE 1024
 
-void sendToServer(int serverSocket, const char *data) {
-    ssize_t bytesSent = send(serverSocket, data, strlen(data), 0);
+void sendToServer(int serverSocket, const char *data, struct sockaddr_in * serverAddr) {
+    ssize_t bytesSent = sendto(serverSocket, data, strlen(data), 0, serverAddr, sizeof(struct sockaddr));
 
     if (bytesSent == -1) {
         perror("Error sending data to server");
@@ -15,11 +15,11 @@ void sendToServer(int serverSocket, const char *data) {
     }
 }
 
-void receiveResults(int serverSocket) {
+void receiveResults(int serverSocket, struct sockaddr_in * serverAddr) {
     char buffer[BUFFER_SIZE];
 
     // Receive results from the server
-    ssize_t bytesRead = recv(serverSocket, buffer, sizeof(buffer), 0);
+    ssize_t bytesRead = recv(serverSocket, buffer, sizeof(buffer), 0, serverAddr, sizeof(struct sockaddr));
 
     if (bytesRead <= 0) {
         perror("Error receiving results from server");
@@ -72,7 +72,7 @@ int main(int argc, char *argv[]) {
         }
 
         // Send user input to the server
-        sendToServer(clientSocket, userInput);
+        sendToServer(clientSocket, userInput, serverAddr);
 
         // Receive and print results from the server
         receiveResults(clientSocket);
