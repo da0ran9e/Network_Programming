@@ -3,72 +3,44 @@
 #include <string.h>
 #include <unistd.h>
 #include <arpa/inet.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <signal.h>
 #include <netdb.h>
+#include <signal.h>
 
 #define BUFFER_SIZE 1024
 
 void handleSignal(int signal) {
-    printf("Received signal %d. Exiting.\n", signal);
-    exit(EXIT_SUCCESS);
+    // Handle signals here if needed
 }
 
-void processClientData(int clientSocket) {
+void resolveAndSendResult(int clientSocket, const char *input) {
+    struct addrinfo hints, *result, *p;
     char buffer[BUFFER_SIZE];
-    char resultBuffer[BUFFER_SIZE];
-    struct hostent *host;
-    struct in_addr addr;
 
-    // Receive data from the client
-    ssize_t bytesRead = recv(clientSocket, buffer, sizeof(buffer), 0);
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_DGRAM;
 
-    if (bytesRead <= 0) {
-        perror("Error receiving data from client");
+    // Resolve the input (domain name or IP address)
+    if (getaddrinfo(input, NULL, &hints, &result) != 0) {
+        snprintf(buffer, sizeof(buffer), "Not found information\n");
+        sendto(clientSocket, buffer, strlen(buffer), 0, NULL, 0);
         return;
     }
 
-    buffer[bytesRead] = '\0';  // Null-terminate the received data
+    // Iterate through the list and send the result back to the client
+    for (p = result; p != NULL; p = p->ai_next) {
+        char host[INET6_ADDRSTRLEN];
 
-    // Convert IP address or domain name to the opposite
-    if (inet_pton(AF_INET, buffer, &addr)) {
-        // Input is an IP address, get domain name
-        host = gethostbyaddr(&addr, sizeof(addr), AF_INET);
-
-        if (host != NULL) {
-            snprintf(resultBuffer, sizeof(resultBuffer), "Official name: %s\nAlias name: %s\n", host->h_name, host->h_aliases[0]);
-        } else {
-            snprintf(resultBuffer, sizeof(resultBuffer), "Not found information\n");
+        if (getnameinfo(p->ai_addr, p->ai_addrlen, host, sizeof(host), NULL, 0, NI_NUMERICHOST) != 0) {
+            perror("getnameinfo failed");
+            continue;
         }
-    } else {
-        // Input is a domain name, get IP addresses
-        host = gethostbyname(buffer);
 
-        if (host != NULL) {
-            int i = 0;
-            char aliasBuffer[BUFFER_SIZE];
-            strcpy(resultBuffer, "Official IP: ");
-            while (host->h_addr_list[i] != NULL) {
-                if (i > 0) {
-                    strcat(resultBuffer, "\nAlias IP:\n");
-                    strcpy(aliasBuffer, "");
-                }
-                strcat(resultBuffer, inet_ntoa(*(struct in_addr*)host->h_addr_list[i]));
-                strcat(aliasBuffer, inet_ntoa(*(struct in_addr*)host->h_addr_list[i]));
-                i++;
-            }
-            if (i > 1) {
-                strcat(resultBuffer, aliasBuffer);
-            }
-            strcat(resultBuffer, "\n");
-        } else {
-            snprintf(resultBuffer, sizeof(resultBuffer), "Not found information\n");
-        }
+        snprintf(buffer, sizeof(buffer), "%s\n", host);
+        sendto(clientSocket, buffer, strlen(buffer), 0, NULL, 0);
     }
 
-    // Send the result back to the client
-    send(clientSocket, resultBuffer, strlen(resultBuffer), 0);
+    freeaddrinfo(result);
 }
 
 int main(int argc, char *argv[]) {
@@ -77,7 +49,7 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    int serverSocket, clientSocket;
+    int serverSocket;
     struct sockaddr_in serverAddr, clientAddr;
     socklen_t addrLen = sizeof(clientAddr);
 
@@ -100,15 +72,17 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    // Register signal handler for termination
-    signal(SIGINT, handleSignal);
-
     printf("Server listening on port %d...\n", atoi(argv[1]));
 
-    // Receive and process client data
+    // Register signal handler
+    signal(SIGINT, handleSignal);
+
     while (1) {
         char buffer[BUFFER_SIZE];
-        int bytesRead = recvfrom(serverSocket, buffer, sizeof(buffer), 0, (struct sockaddr*)&clientAddr, &addrLen);
+        ssize_t bytesRead;
+
+        // Receive data from the client
+        bytesRead = recvfrom(serverSocket, buffer, sizeof(buffer), 0, (struct sockaddr*)&clientAddr, &addrLen);
 
         if (bytesRead <= 0) {
             perror("Error receiving data from client");
@@ -117,10 +91,8 @@ int main(int argc, char *argv[]) {
 
         buffer[bytesRead] = '\0';  // Null-terminate the received data
 
-        printf("Received data from %s:%d: %s\n", inet_ntoa(clientAddr.sin_addr), ntohs(clientAddr.sin_port), buffer);
-
-        // Process client data
-        processClientData(serverSocket, (struct sockaddr*)&clientAddr, addrLen, buffer);
+        // Process client request and send the result
+        resolveAndSendResult(serverSocket, buffer);
     }
 
     // Close the server socket
