@@ -6,11 +6,22 @@
 
 #define MAX_BUFF_SIZE 1024
 
-void receiveResults(int sockfd) {
+void sendToServer(int serverSocket, const char *data, size_t dataSize) {
+    ssize_t bytesSent = sendto(serverSocket, data, dataSize, 0, NULL, 0);
+
+    if (bytesSent == -1) {
+        perror("Error sending data to server");
+        exit(EXIT_FAILURE);
+    }
+}
+
+void receiveResults(int serverSocket) {
     char buffer[MAX_BUFF_SIZE];
+    struct sockaddr_in serverAddr;
+    socklen_t addrLen = sizeof(serverAddr);
 
     // Receive results from the server
-    ssize_t bytesRead = recvfrom(sockfd, buffer, sizeof(buffer), 0, NULL, NULL);
+    ssize_t bytesRead = recvfrom(serverSocket, buffer, sizeof(buffer), 0, (struct sockaddr*)&serverAddr, &addrLen);
 
     if (bytesRead <= 0) {
         perror("Error receiving results from server");
@@ -29,11 +40,11 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    int sockfd;
+    int clientSocket;
     struct sockaddr_in serverAddr;
 
     // Create socket
-    if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) == -1) {
+    if ((clientSocket = socket(AF_INET, SOCK_DGRAM, 0)) == -1) {
         perror("Socket creation failed");
         exit(EXIT_FAILURE);
     }
@@ -48,7 +59,7 @@ int main(int argc, char *argv[]) {
 
     // Get user input and send to server until a blank string is entered
     while (1) {
-        printf("Enter an IP address or domain name (blank to exit): ");
+        printf("Enter a string (blank to exit): ");
         fgets(userInput, sizeof(userInput), stdin);
 
         // Remove newline character from the input
@@ -63,15 +74,14 @@ int main(int argc, char *argv[]) {
         }
 
         // Send user input to the server
-        sendto(sockfd, userInput, strlen(userInput), 0,
-               (struct sockaddr*)&serverAddr, sizeof(serverAddr));
+        sendToServer(clientSocket, userInput, strlen(userInput));
 
         // Receive and print results from the server
-        receiveResults(sockfd);
+        receiveResults(clientSocket);
     }
 
-    // Close the socket
-    close(sockfd);
+    // Close the client socket
+    close(clientSocket);
 
     return 0;
 }
