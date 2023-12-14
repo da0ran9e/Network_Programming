@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <netdb.h>
+#include <signal.h>
 #include <arpa/inet.h>
 
 #define BUFFER_SIZE 1024
