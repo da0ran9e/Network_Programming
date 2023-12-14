@@ -10,7 +10,7 @@
 
 #define MAX_BUFF_SIZE 1024
 
-int serverSocket;  // Global variable for the server socket
+int g_serverSocket; 
 
 void sig_io(int signo) {
     int n;
@@ -18,7 +18,7 @@ void sig_io(int signo) {
     socklen_t addrLen = sizeof(clientAddr);
     char buffer[MAX_BUFF_SIZE];
 
-    n = recvfrom(serverSocket, buffer, sizeof(buffer), 0, (struct sockaddr*)&clientAddr, &addrLen);
+    n = recvfrom(g_serverSocket, buffer, sizeof(buffer), 0, (struct sockaddr*)&clientAddr, &addrLen);
 
     if (n < 0) {
         perror("Error receiving data");
@@ -28,7 +28,7 @@ void sig_io(int signo) {
     buffer[n] = '\0';
 
     // Process the received domain name or IP address
-    // Here, we use getaddrinfo to obtain information about the input
+    //use getaddrinfo to obtain information about the input
     struct addrinfo hints, *res;
     int status;
     char result[MAX_BUFF_SIZE];
@@ -62,8 +62,7 @@ void sig_io(int signo) {
         freeaddrinfo(res);
     }
 
-    // Send the result back to the client
-    sendto(serverSocket, result, strlen(result), 0, (struct sockaddr*)&clientAddr, sizeof(clientAddr));
+    sendto(g_serverSocket, result, strlen(result), 0, (struct sockaddr*)&clientAddr, sizeof(clientAddr));
 }
 
 int main(int argc, char *argv[]) {
@@ -75,22 +74,19 @@ int main(int argc, char *argv[]) {
     struct sockaddr_in serverAddr;
     struct sigaction sigAction;
 
-    // Create socket
-    if ((serverSocket = socket(AF_INET, SOCK_DGRAM, 0)) == -1) {
+    if ((g_serverSocket = socket(AF_INET, SOCK_DGRAM, 0)) == -1) {
         perror("Socket creation failed");
         exit(EXIT_FAILURE);
     }
 
-    // Set up server address struct
     memset(&serverAddr, 0, sizeof(serverAddr));
     serverAddr.sin_family = AF_INET;
     serverAddr.sin_addr.s_addr = INADDR_ANY;
     serverAddr.sin_port = htons(atoi(argv[1]));
 
-    // Bind the socket to the specified port
-    if (bind(serverSocket, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) == -1) {
+    if (bind(g_serverSocket, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) == -1) {
         perror("Bind failed");
-        close(serverSocket);
+        close(g_serverSocket);
         exit(EXIT_FAILURE);
     }
 
@@ -101,25 +97,23 @@ int main(int argc, char *argv[]) {
 
     if (sigaction(SIGIO, &sigAction, NULL) == -1) {
         perror("Sigaction failed");
-        close(serverSocket);
+        close(g_serverSocket);
         exit(EXIT_FAILURE);
     }
 
     // Set socket options for signal-driven I/O
     int on = 1;
-    ioctl(serverSocket, FIOASYNC, &on);
-    fcntl(serverSocket, F_SETOWN, getpid());
-    ioctl(serverSocket, FIONBIO, &on);
+    ioctl(g_serverSocket, FIOASYNC, &on);
+    fcntl(g_serverSocket, F_SETOWN, getpid());
+    ioctl(g_serverSocket, FIONBIO, &on);
 
     printf("Server listening on port %d...\n", atoi(argv[1]));
 
-    // Keep the server running
     while (1) {
-        sleep(1);  // Sleep to allow the signal-driven I/O to handle data
+        sleep(1);
     }
 
-    // Close the server socket
-    close(serverSocket);
+    close(g_serverSocket);
 
     return 0;
 }
