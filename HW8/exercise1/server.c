@@ -3,51 +3,49 @@
 #include <string.h>
 #include <unistd.h>
 #include <arpa/inet.h>
-#include <sys/socket.h>
-#include <sys/select.h>
 #include <ctype.h>
 
-#define MAX_CLIENTS 30
 #define BUFFER_SIZE 1024
 
 void processClientData(int clientSocket) {
     char buffer[BUFFER_SIZE];
-    ssize_t bytesRead;
+    char alphabetString[BUFFER_SIZE];
+    char digitString[BUFFER_SIZE];
 
-    // Receive data from the client
-    bytesRead = recv(clientSocket, buffer, sizeof(buffer), 0);
+    // Read data from the client
+    ssize_t bytesRead = recv(clientSocket, buffer, sizeof(buffer), 0);
 
     if (bytesRead <= 0) {
-        // Handle disconnection or error
-        close(clientSocket);
-        printf("Client disconnected\n");
+        perror("Error reading from client");
         return;
     }
 
-    buffer[bytesRead] = '\0';
+    buffer[bytesRead] = '\0';  // Null-terminate the received data
 
-    // Process the received data
-    char alphabetString[BUFFER_SIZE] = "";
-    char digitString[BUFFER_SIZE] = "";
+    // Process the received string
+    int alphabetIndex = 0;
+    int digitIndex = 0;
     int undefinedCount = 0;
 
-    for (size_t i = 0; i < bytesRead; ++i) {
+    for (int i = 0; i < bytesRead; i++) {
         if (isalpha(buffer[i])) {
-            strncat(alphabetString, &buffer[i], 1);
+            alphabetString[alphabetIndex++] = buffer[i];
         } else if (isdigit(buffer[i])) {
-            strncat(digitString, &buffer[i], 1);
+            digitString[digitIndex++] = buffer[i];
         } else {
             undefinedCount++;
         }
     }
 
-    // Send the results back to the client
-    send(clientSocket, digitString, strlen(digitString), 0);
-    send(clientSocket, alphabetString, strlen(alphabetString), 0);
+    alphabetString[alphabetIndex] = '\0';  // Null-terminate the alphabet string
+    digitString[digitIndex] = '\0';        // Null-terminate the digit string
 
-    // If there are undefined characters, send the count
+    // Send the processed strings and the count of undefined characters back to the client
+    send(clientSocket, alphabetString, strlen(alphabetString), 0);
+    send(clientSocket, digitString, strlen(digitString), 0);
+
     if (undefinedCount > 0) {
-        char undefinedCountStr[BUFFER_SIZE];
+        char undefinedCountStr[20];
         snprintf(undefinedCountStr, sizeof(undefinedCountStr), "There is %d undefined character\n", undefinedCount);
         send(clientSocket, undefinedCountStr, strlen(undefinedCountStr), 0);
     }
@@ -59,9 +57,7 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    int port = atoi(argv[1]);
-    int serverSocket, clientSocket, maxfd;
-    fd_set readfds;
+    int serverSocket, clientSocket;
     struct sockaddr_in serverAddr, clientAddr;
     socklen_t addrLen = sizeof(clientAddr);
 
@@ -75,10 +71,10 @@ int main(int argc, char *argv[]) {
     memset(&serverAddr, 0, sizeof(serverAddr));
     serverAddr.sin_family = AF_INET;
     serverAddr.sin_addr.s_addr = INADDR_ANY;
-    serverAddr.sin_port = htons(port);
+    serverAddr.sin_port = htons(atoi(argv[1]));
 
     // Bind the socket to the specified port
-    if (bind(serverSocket, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) == -1) {
+    if (bind(serverSocket, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) == -1) {
         perror("Bind failed");
         close(serverSocket);
         exit(EXIT_FAILURE);
@@ -91,44 +87,34 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    printf("Server listening on port %d...\n", port);
+    printf("Server listening on port %d...\n", atoi(argv[1]));
 
-    FD_ZERO(&readfds);
-    FD_SET(serverSocket, &readfds);
-    maxfd = serverSocket;
-
+    // Accept incoming connections and process client data
     while (1) {
-        fd_set tempfds = readfds;
-        int activity = select(maxfd + 1, &tempfds, NULL, NULL, NULL);
+        // Use select to check if the socket is ready for reading
+        fd_set readfds;
+        FD_ZERO(&readfds);
+        FD_SET(serverSocket, &readfds);
 
-        if (activity < 0) {
-            perror("Select error");
+        if (select(serverSocket + 1, &readfds, NULL, NULL, NULL) == -1) {
+            perror("Select failed");
+            close(serverSocket);
             exit(EXIT_FAILURE);
         }
 
-        if (FD_ISSET(serverSocket, &tempfds)) {
-            // New connection
-            if ((clientSocket = accept(serverSocket, (struct sockaddr *)&clientAddr, &addrLen)) == -1) {
+        if (FD_ISSET(serverSocket, &readfds)) {
+            if ((clientSocket = accept(serverSocket, (struct sockaddr*)&clientAddr, &addrLen)) == -1) {
                 perror("Accept failed");
                 continue;
             }
 
-            printf("New connection from %s:%d\n", inet_ntoa(clientAddr.sin_addr), ntohs(clientAddr.sin_port));
+            printf("Connection accepted from %s:%d\n", inet_ntoa(clientAddr.sin_addr), ntohs(clientAddr.sin_port));
 
-            FD_SET(clientSocket, &readfds);
+            // Process client data
+            processClientData(clientSocket);
 
-            if (clientSocket > maxfd) {
-                maxfd = clientSocket;
-            }
-        }
-
-        // Check data from clients
-        for (int i = serverSocket + 1; i <= maxfd; i++) {
-            if (FD_ISSET(i, &tempfds)) {
-                processClientData(i);
-                FD_CLR(i, &readfds);
-                close(i);
-            }
+            // Close the client socket
+            close(clientSocket);
         }
     }
 
